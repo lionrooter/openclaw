@@ -250,6 +250,34 @@ describe("command queue", () => {
     await Promise.all([first, second]);
   });
 
+  it("waitForActiveTasks excludes probe lanes by default", async () => {
+    const probeTask = enqueueCommandInLane("auth-probe:test", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+
+    const start = Date.now();
+    const { drained } = await waitForActiveTasks(2_000);
+    const elapsed = Date.now() - start;
+
+    expect(drained).toBe(true);
+    expect(elapsed).toBeLessThan(200);
+    await probeTask;
+  });
+
+  it("waitForActiveTasks includes probe lanes when excludeProbes=false", async () => {
+    let probeDone = false;
+    const probeTask = enqueueCommandInLane("session:probe-test", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      probeDone = true;
+    });
+
+    const { drained } = await waitForActiveTasks(2_000, { excludeProbes: false });
+
+    expect(drained).toBe(true);
+    expect(probeDone).toBe(true);
+    await probeTask;
+  });
+
   it("clearCommandLane rejects pending promises", async () => {
     let resolve1!: () => void;
     const blocker = new Promise<void>((r) => {

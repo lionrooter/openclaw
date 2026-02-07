@@ -127,9 +127,10 @@ export function createGatewayReloadHandlers(params: {
         // finish before tearing down channel connections.  This prevents
         // the scenario where a config reload kills a Discord REST
         // connection while an agent response is mid-delivery.
-        // 30s timeout: agent runs commonly take 10-60s including delivery.
+        // 120s timeout: agent runs commonly take 60-120s including delivery.
+        // Probe lanes are excluded, they are not required for channel restarts.
         params.logChannels.info("waiting for active lane tasks to drain before channel restart");
-        const { drained } = await waitForActiveTasks(30_000);
+        const { drained } = await waitForActiveTasks(120_000, { excludeProbes: true });
         if (drained) {
           params.logChannels.info("lane drain complete, proceeding with channel restart");
         } else {
