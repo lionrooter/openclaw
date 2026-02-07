@@ -11,6 +11,9 @@ export const DISCORD_RETRY_DEFAULTS = {
   jitter: 0.1,
 };
 
+/** Transient network errors worth retrying for Discord REST calls. */
+const DISCORD_TRANSIENT_RE = /timeout|connect|reset|closed|ECONNREFUSED|ENOTFOUND|fetch failed/i;
+
 export const TELEGRAM_RETRY_DEFAULTS = {
   attempts: 3,
   minDelayMs: 400,
@@ -55,14 +58,17 @@ export function createDiscordRetryRunner(params: {
     retryAsync(fn, {
       ...retryConfig,
       label,
-      shouldRetry: (err) => err instanceof RateLimitError,
+      shouldRetry: (err) =>
+        err instanceof RateLimitError || DISCORD_TRANSIENT_RE.test(formatErrorMessage(err)),
       retryAfterMs: (err) => (err instanceof RateLimitError ? err.retryAfter * 1000 : undefined),
       onRetry: params.verbose
         ? (info) => {
             const labelText = info.label ?? "request";
             const maxRetries = Math.max(1, info.maxAttempts - 1);
+            const reason =
+              info.err instanceof RateLimitError ? "rate limited" : formatErrorMessage(info.err);
             console.warn(
-              `discord ${labelText} rate limited, retry ${info.attempt}/${maxRetries} in ${info.delayMs}ms`,
+              `discord ${labelText} ${reason}, retry ${info.attempt}/${maxRetries} in ${info.delayMs}ms`,
             );
           }
         : undefined,
