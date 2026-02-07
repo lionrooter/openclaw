@@ -37,6 +37,11 @@ type LaneState = {
 
 const lanes = new Map<string, LaneState>();
 let nextTaskId = 1;
+const PROBE_LANE_PREFIXES = ["auth-probe:", "session:probe-"];
+
+function isProbeLane(lane: string): boolean {
+  return PROBE_LANE_PREFIXES.some((prefix) => lane.startsWith(prefix));
+}
 
 function getLaneState(lane: string): LaneState {
   const existing = lanes.get(lane);
@@ -98,8 +103,7 @@ function drainLane(lane: string) {
           entry.resolve(result);
         } catch (err) {
           const completedCurrentGeneration = completeTask(state, taskId, taskGeneration);
-          const isProbeLane = lane.startsWith("auth-probe:") || lane.startsWith("session:probe-");
-          if (!isProbeLane) {
+          if (!isProbeLane(lane)) {
             diag.error(
               `lane task error: lane=${lane} durationMs=${Date.now() - startTime} error="${String(err)}"`,
             );
@@ -240,12 +244,19 @@ export function getActiveTaskCount(): number {
  * New tasks enqueued after this call are ignored — only tasks that are
  * already executing are waited on.
  */
-export function waitForActiveTasks(timeoutMs: number): Promise<{ drained: boolean }> {
+export function waitForActiveTasks(
+  timeoutMs: number = 120_000,
+  opts?: { excludeProbes?: boolean },
+): Promise<{ drained: boolean }> {
+  const excludeProbes = opts?.excludeProbes ?? true;
   // Keep shutdown/drain checks responsive without busy looping.
-  const POLL_INTERVAL_MS = 50;
+  const POLL_INTERVAL_MS = 250;
   const deadline = Date.now() + timeoutMs;
   const activeAtStart = new Set<number>();
   for (const state of lanes.values()) {
+    if (excludeProbes && isProbeLane(state.lane)) {
+      continue;
+    }
     for (const taskId of state.activeTaskIds) {
       activeAtStart.add(taskId);
     }
