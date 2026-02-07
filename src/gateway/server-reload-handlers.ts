@@ -13,7 +13,11 @@ import {
   emitGatewayRestart,
   setGatewaySigusr1RestartPolicy,
 } from "../infra/restart.js";
-import { setCommandLaneConcurrency, getTotalQueueSize } from "../process/command-queue.js";
+import {
+  getTotalQueueSize,
+  setCommandLaneConcurrency,
+  waitForActiveTasks,
+} from "../process/command-queue.js";
 import { CommandLane } from "../process/lanes.js";
 import { resolveHooksConfig } from "./hooks.js";
 import { startBrowserControlServerIfEnabled } from "./server-browser.js";
@@ -119,6 +123,19 @@ export function createGatewayReloadHandlers(params: {
           "skipping channel reload (OPENCLAW_SKIP_CHANNELS=1 or OPENCLAW_SKIP_PROVIDERS=1)",
         );
       } else {
+        // Wait for in-flight lane tasks (agent responses, deliveries) to
+        // finish before tearing down channel connections.  This prevents
+        // the scenario where a config reload kills a Discord REST
+        // connection while an agent response is mid-delivery.
+        // 30s timeout: agent runs commonly take 10-60s including delivery.
+        params.logChannels.info("waiting for active lane tasks to drain before channel restart");
+        const { drained } = await waitForActiveTasks(30_000);
+        if (drained) {
+          params.logChannels.info("lane drain complete, proceeding with channel restart");
+        } else {
+          params.logChannels.info("lane drain timed out; proceeding with channel restart");
+        }
+
         const restartChannel = async (name: ChannelKind) => {
           params.logChannels.info(`restarting ${name} channel`);
           await params.stopChannel(name);
