@@ -86,3 +86,11 @@ USER.md
 !.agent/workflows/
 /local/
 package-lock.json
+# Local skills & assets (custom, not for upstream)
+.clawdhub/
+skills/cua-computer/
+skills/discord-doctor/
+skills/holocube/
+skills/nano-banana-pro/*.png
+skills/spotify-applescript/
+extensions/matrix/matrix

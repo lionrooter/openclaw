@@ -1,5 +1,7 @@
 import { ChannelType } from "@buape/carbon";
+import { readFile } from "node:fs/promises";
 import type { ReplyPayload } from "../../auto-reply/types.js";
+import type { ImageContent } from "../../commands/agent/types.js";
 import type { DiscordMessagePreflightContext } from "./message-handler.preflight.js";
 import { resolveAckReaction, resolveHumanDelayConfig } from "../../agents/identity.js";
 import { resolveChunkMode } from "../../auto-reply/chunk.js";
@@ -84,6 +86,21 @@ export async function processDiscordMessage(ctx: DiscordMessagePreflightContext)
   } = ctx;
 
   const mediaList = await resolveMediaList(message, mediaMaxBytes);
+
+  // Convert downloaded image files to ImageContent blocks for the LLM
+  const inboundImages: ImageContent[] = [];
+  for (const media of mediaList) {
+    const ct = media.contentType || "";
+    if (ct.startsWith("image/")) {
+      try {
+        const buf = await readFile(media.path);
+        inboundImages.push({ type: "image", data: buf.toString("base64"), mimeType: ct });
+      } catch (err) {
+        logVerbose(`discord: failed to read image file ${media.path}: ${String(err)}`);
+      }
+    }
+  }
+
   const text = messageText;
   if (!text) {
     logVerbose(`discord: drop message ${message.id} (empty content)`);
@@ -401,6 +418,7 @@ export async function processDiscordMessage(ctx: DiscordMessagePreflightContext)
     dispatcher,
     replyOptions: {
       ...replyOptions,
+      images: inboundImages.length > 0 ? inboundImages : undefined,
       skillFilter: channelConfig?.skills,
       disableBlockStreaming:
         typeof discordConfig?.blockStreaming === "boolean"
