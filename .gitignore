@@ -114,3 +114,12 @@ dist/protocol.schema.json
 
 # Synthing
 **/.stfolder/
+
+# Local skills & assets (custom, not for upstream)
+.clawdhub/
+skills/cua-computer/
+skills/discord-doctor/
+skills/holocube/
+skills/nano-banana-pro/*.png
+skills/spotify-applescript/
+extensions/matrix/matrix
