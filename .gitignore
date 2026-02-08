@@ -99,3 +99,12 @@ package-lock.json
 
 # Local iOS signing overrides
 apps/ios/LocalSigning.xcconfig
+
+# Local skills & assets (custom, not for upstream)
+.clawdhub/
+skills/cua-computer/
+skills/discord-doctor/
+skills/holocube/
+skills/nano-banana-pro/*.png
+skills/spotify-applescript/
+extensions/matrix/matrix

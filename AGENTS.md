@@ -66,6 +66,52 @@
 - Format fix: `pnpm format:fix` (oxfmt --write)
 - Tests: `pnpm test` (vitest); coverage: `pnpm test:coverage`
 
+## Agent Teams (Claude Code Multi-Agent)
+
+When using Claude Code's agent teams feature, teammates split work by **independent modules**. This table defines ownership boundaries so agents don't collide:
+
+| Module            | Path(s)                                                                                   | Owner                | Notes                            |
+| ----------------- | ----------------------------------------------------------------------------------------- | -------------------- | -------------------------------- |
+| CLI wiring        | `src/cli/`                                                                                | Agent A              | Commands, flags, progress        |
+| Gateway core      | `src/gateway/`, `src/routing/`                                                            | Agent B              | Message routing, lifecycle       |
+| Channel providers | `src/telegram/`, `src/discord/`, `src/slack/`, `src/signal/`, `src/imessage/`, `src/web/` | Agent C              | One agent per channel or grouped |
+| Extensions        | `extensions/*`                                                                            | Agent D              | Plugin packages (isolated)       |
+| Media pipeline    | `src/media/`                                                                              | Any                  | Stateless transforms             |
+| Infra / config    | `src/infra/`, `src/config/`                                                               | Agent B              | Shared config schema             |
+| Docs              | `docs/`                                                                                   | Docs agent           | Markdown only, no code           |
+| Tests             | `*.test.ts` (colocated)                                                                   | Same as source owner | Tests follow source ownership    |
+| Native apps       | `apps/ios/`, `apps/macos/`, `apps/android/`                                               | Platform agent       | One per platform                 |
+| Scripts           | `scripts/`                                                                                | Any (coordinate)     | Small, usually single-purpose    |
+
+### Shared Files (Require Coordination)
+
+These files are touched by multiple modules. **Only one agent should edit them at a time**, or edits must be sequential:
+
+- `package.json` / `pnpm-lock.yaml` — dependency changes
+- `tsconfig.json` / `tsconfig.*.json` — compiler config
+- `src/types/` — shared type definitions
+- `src/channels/index.ts` — channel registry
+- `CHANGELOG.md` — append-only (last writer wins is OK)
+- `.github/labeler.yml` — label rules for new paths
+
+### Verification Commands (Quick Reference for Teammates)
+
+Every agent should run these before marking work complete:
+
+```bash
+pnpm build        # Type-check + compile
+pnpm check        # Lint + format
+pnpm test         # Unit tests
+```
+
+### Team Splitting Tips
+
+- **Prefer 2-4 agents** for most tasks; more agents = more coordination overhead.
+- Each agent should own **complete vertical slices** (source + test + types) rather than horizontal layers.
+- If two agents need the same file, have one agent finish first, then the other builds on it.
+- Extensions are ideal for parallel work — each is an isolated package.
+- Channel providers are semi-independent but share `src/channels/` registry — coordinate writes there.
+
 ## Coding Style & Naming Conventions
 
 - Language: TypeScript (ESM). Prefer strict typing; avoid `any`.

@@ -1059,8 +1059,27 @@ export async function runSubagentAnnounceFlow(params: {
     const taskLabel = params.label || params.task || "task";
     const subagentName = resolveAgentIdFromSessionKey(params.childSessionKey);
     const announceSessionId = childSessionId || "unknown";
-    const findings = reply || "(no output)";
-    let completionMessage = "";
+    // Strip raw CLI init JSON from the reply when a subagent crashes during init.
+    let findings = reply || "(no output)";
+    if (findings.includes('{"type":"system"')) {
+      findings =
+        findings
+          .split("\n")
+          .map((line) => {
+            const initIdx = line.indexOf('{"type":"system"');
+            if (initIdx === -1) {
+              return line;
+            }
+            return line.slice(0, initIdx).trim();
+          })
+          .filter((line) => line.length > 0)
+          .join("\n")
+          .trim() || "(sub-agent crashed during init)";
+    }
+    const MAX_FINDINGS_CHARS = 800;
+    if (findings.length > MAX_FINDINGS_CHARS) {
+      findings = `${findings.slice(0, MAX_FINDINGS_CHARS)}\n...(truncated)`;
+    }
     let triggerMessage = "";
 
     let requesterIsSubagent = requesterDepth >= 1;
