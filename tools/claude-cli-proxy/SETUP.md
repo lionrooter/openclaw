@@ -46,17 +46,17 @@ Response back through chain → Posted to Discord
 
 ```bash
 # Make proxy executable
-chmod +x /Users/lionroot/scripts/claude-cli-proxy-final.mjs
+chmod +x /Users/lionheart/scripts/claude-cli-proxy-final.mjs
 
 # Start proxy (keep running)
-node /Users/lionroot/scripts/claude-cli-proxy-final.mjs
+node /Users/lionheart/scripts/claude-cli-proxy-final.mjs
 ```
 
 You should see:
 
 ```
 🦞 Claude CLI Proxy running on http://127.0.0.1:11435
-Using Claude CLI: /Users/lionroot/.local/bin/claude
+Using Claude CLI: /Users/lionheart/.local/bin/claude
 Models available: sonnet, opus, haiku
 
 This proxy uses your Claude Code subscription - no API costs!
@@ -241,7 +241,7 @@ To speed up:
 
 ### 1. Run proxy as background service
 
-Create `/Users/lionroot/Library/LaunchAgents/com.user.claude-cli-proxy.plist`:
+Create `/Users/lionheart/Library/LaunchAgents/com.user.claude-cli-proxy.plist`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -253,7 +253,7 @@ Create `/Users/lionroot/Library/LaunchAgents/com.user.claude-cli-proxy.plist`:
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/node</string>
-        <string>/Users/lionroot/scripts/claude-cli-proxy-final.mjs</string>
+        <string>/Users/lionheart/scripts/claude-cli-proxy-final.mjs</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
