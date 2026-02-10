@@ -11,7 +11,7 @@ import { spawn } from "child_process";
 import http from "http";
 
 const PORT = 11435;
-const CLAUDE_CLI_PATH = "/Users/lionroot/.local/bin/claude";
+const CLAUDE_CLI_PATH = "/Users/lionheart/.local/bin/claude";
 
 const MODEL_MAP = {
   sonnet: "sonnet",
