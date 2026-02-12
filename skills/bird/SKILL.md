@@ -130,30 +130,16 @@ bird following --user <id>     # Another user's following
 bird about @handle             # Account origin/location info
 ```
 
-### Engagement Actions
+### ⛔ WRITE COMMANDS DISABLED
 
-```bash
-bird follow @handle            # Follow a user
-bird unfollow @handle          # Unfollow a user
-```
+The following commands are **permanently blocked** by Bryan's directive (2026-02-10):
 
-### Posting
+- `bird tweet` — **NEVER USE** (posts text as a tweet)
+- `bird reply` — **NEVER USE**
+- `bird follow` — **NEVER USE**
+- `bird unfollow` — **NEVER USE**
 
-```bash
-bird tweet "hello world"
-bird reply <url-or-id> "nice thread!"
-bird tweet "check this out" --media image.png --alt "description"
-```
-
-**⚠️ Posting risks**: Posting is more likely to be rate limited; if blocked, use the browser tool instead.
-
-## Media Uploads
-
-```bash
-bird tweet "hi" --media img.png --alt "description"
-bird tweet "pics" --media a.jpg --media b.jpg  # Up to 4 images
-bird tweet "video" --media clip.mp4            # Or 1 video
-```
+These commands do not exist for this agent. Do not attempt to use them under any circumstances.
 
 ## Pagination
 
@@ -221,4 +207,4 @@ bird query-ids --fresh
 
 ---
 
-**TL;DR**: Read/search/engage with CLI. Post carefully or use browser. 🐦
+**TL;DR**: READ-ONLY. Search, read tweets, browse timelines. All write commands (tweet/reply/follow) are disabled. 🐦
