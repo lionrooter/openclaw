@@ -562,7 +562,7 @@ importers:
     dependencies:
       openclaw:
         specifier: '*'
-        version: 2026.2.6-3(@napi-rs/canvas@0.1.90)(@types/express@5.0.6)(audio-decode@2.2.3)(node-llama-cpp@3.15.1(typescript@5.9.3))(signal-polyfill@0.2.2)
+        version: 2026.2.9(@napi-rs/canvas@0.1.90)(@types/express@5.0.6)(audio-decode@2.2.3)(node-llama-cpp@3.15.1(typescript@5.9.3))(signal-polyfill@0.2.2)
 
   packages/clawdbot:
     dependencies:
@@ -4718,8 +4718,8 @@ packages:
       zod:
         optional: true
 
-  openclaw@2026.2.6-3:
-    resolution: {integrity: sha512-NJiU09ZnBXUVI9FfDs4ahu+kq0rEm7tEHriDlw1WDdAWQyfr2fQY/Q8lC/DH76Ky+Xr2SxZ5kTJsJghGLq4PHQ==}
+  openclaw@2026.2.9:
+    resolution: {integrity: sha512-kJbbIg98ikbZSvS/ypk3Btjha//Fg1sao/xqYrzyMNFNpZFVMcvZNVvMdjRLtccyYNCa5GAJ5nNxP7fzEnS0KQ==}
     engines: {node: '>=22.12.0'}
     hasBin: true
     peerDependencies:
@@ -10356,22 +10356,22 @@ snapshots:
       ws: 8.19.0
       zod: 4.3.6
 
-  openclaw@2026.2.6-3(@napi-rs/canvas@0.1.90)(@types/express@5.0.6)(audio-decode@2.2.3)(node-llama-cpp@3.15.1(typescript@5.9.3))(signal-polyfill@0.2.2):
+  openclaw@2026.2.9(@napi-rs/canvas@0.1.90)(@types/express@5.0.6)(audio-decode@2.2.3)(node-llama-cpp@3.15.1(typescript@5.9.3))(signal-polyfill@0.2.2):
     dependencies:
       '@agentclientprotocol/sdk': 0.14.1(zod@4.3.6)
       '@aws-sdk/client-bedrock': 3.985.0
-      '@buape/carbon': 0.0.0-beta-20260130162700(hono@4.11.8)
+      '@buape/carbon': 0.14.0(hono@4.11.8)
       '@clack/prompts': 1.0.0
       '@grammyjs/runner': 2.0.3(grammy@1.39.3)
       '@grammyjs/transformer-throttler': 1.2.1(grammy@1.39.3)
-      '@homebridge/ciao': 1.3.4
+      '@homebridge/ciao': 1.3.5
       '@larksuiteoapi/node-sdk': 1.58.0
       '@line/bot-sdk': 10.6.0
       '@lydell/node-pty': 1.2.0-beta.3
-      '@mariozechner/pi-agent-core': 0.52.7(ws@8.19.0)(zod@4.3.6)
-      '@mariozechner/pi-ai': 0.52.7(ws@8.19.0)(zod@4.3.6)
-      '@mariozechner/pi-coding-agent': 0.52.7(ws@8.19.0)(zod@4.3.6)
-      '@mariozechner/pi-tui': 0.52.7
+      '@mariozechner/pi-agent-core': 0.52.9(ws@8.19.0)(zod@4.3.6)
+      '@mariozechner/pi-ai': 0.52.9(ws@8.19.0)(zod@4.3.6)
+      '@mariozechner/pi-coding-agent': 0.52.9(ws@8.19.0)(zod@4.3.6)
+      '@mariozechner/pi-tui': 0.52.9
       '@mozilla/readability': 0.6.0
       '@napi-rs/canvas': 0.1.90
       '@sinclair/typebox': 0.34.48

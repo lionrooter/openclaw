@@ -80,7 +80,7 @@ export async function runCliAgent(params: {
 
   const extraSystemPrompt = [
     params.extraSystemPrompt?.trim(),
-    "Tools are disabled in this session. Do not call tools.",
+    "You do not have tool access in this session. Any file attachments referenced in the message have already been downloaded and their contents are included directly in the message text.",
   ]
     .filter(Boolean)
     .join("\n");
