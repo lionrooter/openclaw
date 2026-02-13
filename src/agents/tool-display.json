@@ -299,6 +299,11 @@
       "title": "Web Search",
       "detailKeys": ["query", "count"]
     },
+    "web_search_context": {
+      "emoji": "📑",
+      "title": "Web Context",
+      "detailKeys": ["query", "max_tokens"]
+    },
     "web_fetch": {
       "emoji": "📄",
       "title": "Web Fetch",
