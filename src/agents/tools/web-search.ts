@@ -23,6 +23,7 @@ const DEFAULT_SEARCH_COUNT = 5;
 const MAX_SEARCH_COUNT = 10;
 
 const BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
+const BRAVE_CONTEXT_ENDPOINT = "https://api.search.brave.com/res/v1/llm/context";
 const DEFAULT_PERPLEXITY_BASE_URL = "https://openrouter.ai/api/v1";
 const PERPLEXITY_DIRECT_BASE_URL = "https://api.perplexity.ai";
 const DEFAULT_PERPLEXITY_MODEL = "perplexity/sonar-pro";
@@ -33,6 +34,7 @@ const XAI_API_ENDPOINT = "https://api.x.ai/v1/responses";
 const DEFAULT_GROK_MODEL = "grok-4-1-fast";
 
 const SEARCH_CACHE = new Map<string, CacheEntry<Record<string, unknown>>>();
+const CONTEXT_CACHE = new Map<string, CacheEntry<Record<string, unknown>>>();
 const BRAVE_FRESHNESS_SHORTCUTS = new Set(["pd", "pw", "pm", "py"]);
 const BRAVE_FRESHNESS_RANGE = /^(\d{4}-\d{2}-\d{2})to(\d{4}-\d{2}-\d{2})$/;
 
@@ -136,6 +138,98 @@ type PerplexitySearchResponse = {
 };
 
 type PerplexityBaseUrlHint = "direct" | "openrouter";
+
+// --- Brave LLM Context API types ---
+
+const CONTEXT_THRESHOLD_MODES = ["strict", "balanced", "lenient", "disabled"] as const;
+type ContextThresholdMode = (typeof CONTEXT_THRESHOLD_MODES)[number];
+
+const DEFAULT_CONTEXT_MAX_TOKENS = 8192;
+const DEFAULT_CONTEXT_MAX_URLS = 20;
+const DEFAULT_CONTEXT_MAX_TOKENS_PER_URL = 4096;
+const DEFAULT_CONTEXT_COUNT = 20;
+const DEFAULT_CONTEXT_THRESHOLD: ContextThresholdMode = "balanced";
+
+const MIN_CONTEXT_MAX_TOKENS = 1024;
+const MAX_CONTEXT_MAX_TOKENS = 32768;
+const MIN_CONTEXT_MAX_URLS = 1;
+const MAX_CONTEXT_MAX_URLS = 50;
+const MIN_CONTEXT_MAX_TOKENS_PER_URL = 512;
+const MAX_CONTEXT_MAX_TOKENS_PER_URL = 8192;
+const MIN_CONTEXT_COUNT = 1;
+const MAX_CONTEXT_COUNT = 50;
+
+type BraveContextSnippet = {
+  title?: string;
+  url?: string;
+  description?: string;
+  text?: string;
+  meta_url?: { hostname?: string };
+};
+
+type BraveContextResponse = {
+  grounding?: {
+    generic?: BraveContextSnippet[];
+  };
+};
+
+type ContextConfig = {
+  enabled?: boolean;
+  maxTokens?: number;
+  maxUrls?: number;
+  maxTokensPerUrl?: number;
+  thresholdMode?: string;
+  timeoutSeconds?: number;
+  cacheTtlMinutes?: number;
+};
+
+const WebSearchContextSchema = Type.Object({
+  query: Type.String({ description: "Search query string." }),
+  max_tokens: Type.Optional(
+    Type.Number({
+      description: "Maximum total tokens for the context response (1024-32768, default: 8192).",
+      minimum: MIN_CONTEXT_MAX_TOKENS,
+      maximum: MAX_CONTEXT_MAX_TOKENS,
+    }),
+  ),
+  max_urls: Type.Optional(
+    Type.Number({
+      description: "Maximum number of source URLs (1-50, default: 20).",
+      minimum: MIN_CONTEXT_MAX_URLS,
+      maximum: MAX_CONTEXT_MAX_URLS,
+    }),
+  ),
+  max_tokens_per_url: Type.Optional(
+    Type.Number({
+      description: "Maximum tokens per source URL (512-8192, default: 4096).",
+      minimum: MIN_CONTEXT_MAX_TOKENS_PER_URL,
+      maximum: MAX_CONTEXT_MAX_TOKENS_PER_URL,
+    }),
+  ),
+  count: Type.Optional(
+    Type.Number({
+      description: "Number of search results to consider (1-50, default: 20).",
+      minimum: MIN_CONTEXT_COUNT,
+      maximum: MAX_CONTEXT_COUNT,
+    }),
+  ),
+  country: Type.Optional(
+    Type.String({
+      description: "2-letter country code for region-specific results (default: 'US').",
+    }),
+  ),
+  search_lang: Type.Optional(
+    Type.String({
+      description: "ISO language code for search results (e.g., 'en', 'de').",
+    }),
+  ),
+  threshold: Type.Optional(
+    Type.String({
+      description:
+        "Relevance threshold mode: 'strict', 'balanced', 'lenient', or 'disabled' (default: 'balanced').",
+    }),
+  ),
+});
 
 function extractGrokContent(data: GrokSearchResponse): {
   text: string | undefined;
@@ -792,6 +886,219 @@ export function createWebSearchTool(options?: {
   };
 }
 
+// --- Brave LLM Context API helpers ---
+
+function resolveContextConfig(cfg?: OpenClawConfig): ContextConfig | undefined {
+  const search = cfg?.tools?.web?.search;
+  if (!search || typeof search !== "object") {
+    return undefined;
+  }
+  const context = "context" in search ? search.context : undefined;
+  if (!context || typeof context !== "object") {
+    return undefined;
+  }
+  return context as ContextConfig;
+}
+
+function clampNumber(
+  value: number | undefined,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function normalizeThresholdMode(value: string | undefined): ContextThresholdMode {
+  if (!value) {
+    return DEFAULT_CONTEXT_THRESHOLD;
+  }
+  const lower = value.trim().toLowerCase();
+  if ((CONTEXT_THRESHOLD_MODES as readonly string[]).includes(lower)) {
+    return lower as ContextThresholdMode;
+  }
+  return DEFAULT_CONTEXT_THRESHOLD;
+}
+
+async function runBraveContext(params: {
+  query: string;
+  count: number;
+  maxTokens: number;
+  maxUrls: number;
+  maxTokensPerUrl: number;
+  threshold: ContextThresholdMode;
+  apiKey: string;
+  timeoutSeconds: number;
+  cacheTtlMs: number;
+  country?: string;
+  searchLang?: string;
+}): Promise<Record<string, unknown>> {
+  const cacheKey = normalizeCacheKey(
+    `brave-context:${params.query}:${params.count}:${params.maxTokens}:${params.maxUrls}:${params.maxTokensPerUrl}:${params.threshold}:${params.country || "default"}:${params.searchLang || "default"}`,
+  );
+  const cached = readCache(CONTEXT_CACHE, cacheKey);
+  if (cached) {
+    return { ...cached.value, cached: true };
+  }
+
+  const start = Date.now();
+
+  const url = new URL(BRAVE_CONTEXT_ENDPOINT);
+  url.searchParams.set("q", params.query);
+  url.searchParams.set("count", String(params.count));
+  url.searchParams.set("maximum_number_of_tokens", String(params.maxTokens));
+  url.searchParams.set("maximum_number_of_urls", String(params.maxUrls));
+  url.searchParams.set("maximum_number_of_tokens_per_url", String(params.maxTokensPerUrl));
+  url.searchParams.set("context_threshold_mode", params.threshold);
+  if (params.country) {
+    url.searchParams.set("country", params.country);
+  }
+  if (params.searchLang) {
+    url.searchParams.set("search_lang", params.searchLang);
+  }
+
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      "X-Subscription-Token": params.apiKey,
+    },
+    signal: withTimeout(undefined, params.timeoutSeconds * 1000),
+  });
+
+  if (!res.ok) {
+    const detail = await readResponseText(res);
+    throw new Error(`Brave Context API error (${res.status}): ${detail || res.statusText}`);
+  }
+
+  const data = (await res.json()) as BraveContextResponse;
+  const snippets = Array.isArray(data.grounding?.generic) ? (data.grounding?.generic ?? []) : [];
+  const mapped = snippets.map((entry) => {
+    const title = entry.title ?? "";
+    const entryUrl = entry.url ?? "";
+    const description = entry.description ?? "";
+    const text = entry.text ?? "";
+    const hostname = entry.meta_url?.hostname ?? resolveSiteName(entryUrl);
+    return {
+      title: title ? wrapWebContent(title, "web_search") : "",
+      url: entryUrl,
+      description: description ? wrapWebContent(description, "web_search") : "",
+      content: text ? wrapWebContent(text, "web_fetch") : "",
+      siteName: hostname || undefined,
+    };
+  });
+
+  const payload = {
+    query: params.query,
+    provider: "brave",
+    tool: "web_search_context",
+    count: mapped.length,
+    tookMs: Date.now() - start,
+    externalContent: {
+      untrusted: true,
+      source: "web_search_context",
+      provider: "brave",
+      wrapped: true,
+    },
+    results: mapped,
+  };
+  writeCache(CONTEXT_CACHE, cacheKey, payload, params.cacheTtlMs);
+  return payload;
+}
+
+export function createWebSearchContextTool(options?: {
+  config?: OpenClawConfig;
+  sandboxed?: boolean;
+}): AnyAgentTool | null {
+  const search = resolveSearchConfig(options?.config);
+  const provider = resolveSearchProvider(search);
+  if (provider !== "brave") {
+    return null;
+  }
+
+  const contextConfig = resolveContextConfig(options?.config);
+  if (contextConfig?.enabled === false) {
+    return null;
+  }
+
+  return {
+    label: "Web Context",
+    name: "web_search_context",
+    description:
+      "Retrieve LLM-optimized content chunks from web pages using the Brave Context API. Returns pre-extracted, relevance-scored content from search results — actual page content, not just links and snippets. Use when you need to read and reason about web content directly.",
+    parameters: WebSearchContextSchema,
+    execute: async (_toolCallId, args) => {
+      const apiKey = resolveSearchApiKey(search);
+      if (!apiKey) {
+        return jsonResult(missingSearchKeyPayload("brave"));
+      }
+
+      const params = args as Record<string, unknown>;
+      const query = readStringParam(params, "query", { required: true });
+      const rawMaxTokens = readNumberParam(params, "max_tokens", { integer: true });
+      const rawMaxUrls = readNumberParam(params, "max_urls", { integer: true });
+      const rawMaxTokensPerUrl = readNumberParam(params, "max_tokens_per_url", { integer: true });
+      const rawCount = readNumberParam(params, "count", { integer: true });
+      const country = readStringParam(params, "country") ?? "US";
+      const searchLang = readStringParam(params, "search_lang");
+      const rawThreshold = readStringParam(params, "threshold");
+
+      const maxTokens = clampNumber(
+        rawMaxTokens ?? contextConfig?.maxTokens,
+        MIN_CONTEXT_MAX_TOKENS,
+        MAX_CONTEXT_MAX_TOKENS,
+        DEFAULT_CONTEXT_MAX_TOKENS,
+      );
+      const maxUrls = clampNumber(
+        rawMaxUrls ?? contextConfig?.maxUrls,
+        MIN_CONTEXT_MAX_URLS,
+        MAX_CONTEXT_MAX_URLS,
+        DEFAULT_CONTEXT_MAX_URLS,
+      );
+      const maxTokensPerUrl = clampNumber(
+        rawMaxTokensPerUrl ?? contextConfig?.maxTokensPerUrl,
+        MIN_CONTEXT_MAX_TOKENS_PER_URL,
+        MAX_CONTEXT_MAX_TOKENS_PER_URL,
+        DEFAULT_CONTEXT_MAX_TOKENS_PER_URL,
+      );
+      const count = clampNumber(
+        rawCount,
+        MIN_CONTEXT_COUNT,
+        MAX_CONTEXT_COUNT,
+        DEFAULT_CONTEXT_COUNT,
+      );
+      const threshold = normalizeThresholdMode(rawThreshold ?? contextConfig?.thresholdMode);
+
+      const timeoutSeconds = resolveTimeoutSeconds(
+        contextConfig?.timeoutSeconds ?? search?.timeoutSeconds,
+        DEFAULT_TIMEOUT_SECONDS,
+      );
+      const cacheTtlMs = resolveCacheTtlMs(
+        contextConfig?.cacheTtlMinutes ?? search?.cacheTtlMinutes,
+        DEFAULT_CACHE_TTL_MINUTES,
+      );
+
+      const result = await runBraveContext({
+        query,
+        count,
+        maxTokens,
+        maxUrls,
+        maxTokensPerUrl,
+        threshold,
+        apiKey,
+        timeoutSeconds,
+        cacheTtlMs,
+        country,
+        searchLang: searchLang || undefined,
+      });
+      return jsonResult(result);
+    },
+  };
+}
+
 export const __testing = {
   inferPerplexityBaseUrlFromApiKey,
   resolvePerplexityBaseUrl,
@@ -803,4 +1110,7 @@ export const __testing = {
   resolveGrokModel,
   resolveGrokInlineCitations,
   extractGrokContent,
+  resolveContextConfig,
+  clampNumber,
+  normalizeThresholdMode,
 } as const;

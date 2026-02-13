@@ -13,6 +13,9 @@ const {
   resolveGrokModel,
   resolveGrokInlineCitations,
   extractGrokContent,
+  resolveContextConfig,
+  clampNumber,
+  normalizeThresholdMode,
 } = __testing;
 
 describe("web_search perplexity baseUrl defaults", () => {
@@ -218,5 +221,113 @@ describe("web_search grok response parsing", () => {
     const result = extractGrokContent({});
     expect(result.text).toBeUndefined();
     expect(result.annotationCitations).toEqual([]);
+  });
+});
+
+describe("web_search_context resolveContextConfig", () => {
+  it("returns undefined for missing config", () => {
+    expect(resolveContextConfig(undefined)).toBeUndefined();
+    expect(resolveContextConfig({})).toBeUndefined();
+  });
+
+  it("returns undefined when tools.web.search is missing", () => {
+    expect(resolveContextConfig({ tools: {} } as any)).toBeUndefined();
+    expect(resolveContextConfig({ tools: { web: {} } } as any)).toBeUndefined();
+    expect(resolveContextConfig({ tools: { web: { search: {} } } } as any)).toBeUndefined();
+  });
+
+  it("returns undefined for non-object context", () => {
+    expect(
+      resolveContextConfig({ tools: { web: { search: { context: "invalid" } } } } as any),
+    ).toBeUndefined();
+  });
+
+  it("extracts nested context config correctly", () => {
+    const cfg = {
+      tools: {
+        web: {
+          search: {
+            context: {
+              enabled: true,
+              maxTokens: 4096,
+              maxUrls: 10,
+              maxTokensPerUrl: 2048,
+              thresholdMode: "strict",
+            },
+          },
+        },
+      },
+    } as any;
+    const result = resolveContextConfig(cfg);
+    expect(result).toBeDefined();
+    expect(result!.enabled).toBe(true);
+    expect(result!.maxTokens).toBe(4096);
+    expect(result!.maxUrls).toBe(10);
+    expect(result!.maxTokensPerUrl).toBe(2048);
+    expect(result!.thresholdMode).toBe("strict");
+  });
+
+  it("returns partial config when some fields omitted", () => {
+    const cfg = {
+      tools: { web: { search: { context: { enabled: false } } } },
+    } as any;
+    const result = resolveContextConfig(cfg);
+    expect(result).toBeDefined();
+    expect(result!.enabled).toBe(false);
+    expect(result!.maxTokens).toBeUndefined();
+  });
+});
+
+describe("web_search_context normalizeThresholdMode", () => {
+  it("returns balanced for undefined/empty", () => {
+    expect(normalizeThresholdMode(undefined)).toBe("balanced");
+    expect(normalizeThresholdMode("")).toBe("balanced");
+    expect(normalizeThresholdMode("  ")).toBe("balanced");
+  });
+
+  it("accepts valid modes (case insensitive)", () => {
+    expect(normalizeThresholdMode("strict")).toBe("strict");
+    expect(normalizeThresholdMode("BALANCED")).toBe("balanced");
+    expect(normalizeThresholdMode("Lenient")).toBe("lenient");
+    expect(normalizeThresholdMode("disabled")).toBe("disabled");
+  });
+
+  it("returns balanced for invalid modes", () => {
+    expect(normalizeThresholdMode("unknown")).toBe("balanced");
+    expect(normalizeThresholdMode("aggressive")).toBe("balanced");
+  });
+});
+
+describe("web_search_context clampNumber", () => {
+  it("returns fallback for undefined", () => {
+    expect(clampNumber(undefined, 1, 100, 50)).toBe(50);
+  });
+
+  it("returns fallback for NaN/Infinity", () => {
+    expect(clampNumber(NaN, 1, 100, 50)).toBe(50);
+    expect(clampNumber(Infinity, 1, 100, 50)).toBe(50);
+    expect(clampNumber(-Infinity, 1, 100, 50)).toBe(50);
+  });
+
+  it("clamps to minimum", () => {
+    expect(clampNumber(0, 1024, 32768, 8192)).toBe(1024);
+    expect(clampNumber(-5, 1024, 32768, 8192)).toBe(1024);
+    expect(clampNumber(500, 1024, 32768, 8192)).toBe(1024);
+  });
+
+  it("clamps to maximum", () => {
+    expect(clampNumber(99999, 1024, 32768, 8192)).toBe(32768);
+    expect(clampNumber(40000, 1024, 32768, 8192)).toBe(32768);
+  });
+
+  it("floors fractional values", () => {
+    expect(clampNumber(2048.7, 1024, 32768, 8192)).toBe(2048);
+    expect(clampNumber(1024.9, 1024, 32768, 8192)).toBe(1024);
+  });
+
+  it("passes through valid values", () => {
+    expect(clampNumber(4096, 1024, 32768, 8192)).toBe(4096);
+    expect(clampNumber(1024, 1024, 32768, 8192)).toBe(1024);
+    expect(clampNumber(32768, 1024, 32768, 8192)).toBe(32768);
   });
 });

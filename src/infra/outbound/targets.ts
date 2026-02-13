@@ -208,6 +208,42 @@ export function resolveHeartbeatDeliveryTarget(params: {
     mode: "heartbeat",
   });
 
+  // If the resolved channel is disabled in config, fall back to "none".
+  // Check both the top-level channel `enabled` flag and per-account enablement.
+  if (resolvedTarget.channel) {
+    const channelTopLevel = (cfg.channels as Record<string, { enabled?: boolean } | undefined>)?.[
+      resolvedTarget.channel
+    ];
+    if (channelTopLevel?.enabled === false) {
+      return {
+        channel: "none",
+        reason: "channel-disabled",
+        accountId: undefined,
+        lastChannel: resolvedTarget.lastChannel,
+        lastAccountId: resolvedTarget.lastAccountId,
+      };
+    }
+    const channelPlugin = getChannelPlugin(resolvedTarget.channel);
+    if (channelPlugin) {
+      const accountIds = channelPlugin.config.listAccountIds(cfg);
+      const hasEnabledAccount = accountIds.some((id) => {
+        const account = channelPlugin.config.resolveAccount(cfg, id);
+        return channelPlugin.config.isEnabled
+          ? channelPlugin.config.isEnabled(account, cfg)
+          : (account as { enabled?: boolean })?.enabled !== false;
+      });
+      if (!hasEnabledAccount) {
+        return {
+          channel: "none",
+          reason: "channel-disabled",
+          accountId: undefined,
+          lastChannel: resolvedTarget.lastChannel,
+          lastAccountId: resolvedTarget.lastAccountId,
+        };
+      }
+    }
+  }
+
   const heartbeatAccountId = heartbeat?.accountId?.trim();
   // Use explicit accountId from heartbeat config if provided, otherwise fall back to session
   let effectiveAccountId = heartbeatAccountId || resolvedTarget.accountId;

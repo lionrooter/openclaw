@@ -1,17 +1,19 @@
 ---
-summary: "Web search + fetch tools (Brave Search API, Perplexity direct/OpenRouter)"
+summary: "Web search + fetch + context tools (Brave Search API, Perplexity direct/OpenRouter)"
 read_when:
-  - You want to enable web_search or web_fetch
+  - You want to enable web_search, web_search_context, or web_fetch
   - You need Brave Search API key setup
   - You want to use Perplexity Sonar for web search
+  - You want LLM-optimized content chunks from the web
 title: "Web Tools"
 ---
 
 # Web tools
 
-OpenClaw ships two lightweight web tools:
+OpenClaw ships three lightweight web tools:
 
 - `web_search` — Search the web via Brave Search API (default) or Perplexity Sonar (direct or via OpenRouter).
+- `web_search_context` — Retrieve LLM-optimized content chunks from web pages (Brave Context API). Returns actual page content, not just links.
 - `web_fetch` — HTTP fetch + readable extraction (HTML → markdown/text).
 
 These are **not** browser automation. For JS-heavy sites or logins, use the
@@ -205,6 +207,70 @@ await web_search({
 });
 ```
 
+## web_search_context
+
+Retrieve LLM-optimized content chunks from web pages using the Brave Context API.
+Unlike `web_search` (which returns titles, URLs, and snippets), `web_search_context`
+returns pre-extracted, relevance-scored page content — the actual text agents need
+to reason about, without a separate `web_fetch` step.
+
+### web_search_context requirements
+
+- Provider must be **Brave** (default)
+- Same Brave API key as `web_search` (`BRAVE_API_KEY` or `tools.web.search.apiKey`)
+- Brave API plan must include the LLM Context endpoint
+
+### web_search_context config
+
+```json5
+{
+  tools: {
+    web: {
+      search: {
+        context: {
+          enabled: true, // default: true when provider=brave + key present
+          maxTokens: 8192, // default token budget (1024-32768)
+          maxUrls: 20, // default max source URLs (1-50)
+          maxTokensPerUrl: 4096, // default tokens per source (512-8192)
+          thresholdMode: "balanced", // strict/balanced/lenient/disabled
+          timeoutSeconds: 30, // inherits from search if omitted
+          cacheTtlMinutes: 15, // inherits from search if omitted
+        },
+      },
+    },
+  },
+}
+```
+
+### web_search_context tool parameters
+
+- `query` (required): search query
+- `max_tokens` (1024–32768; default: 8192): total token budget for response
+- `max_urls` (1–50; default: 20): max source URLs
+- `max_tokens_per_url` (512–8192; default: 4096): tokens per source
+- `count` (1–50; default: 20): search results to consider
+- `country` (default: "US"): 2-letter country code
+- `search_lang` (optional): ISO language code
+- `threshold` (default: "balanced"): relevance filter — strict/balanced/lenient/disabled
+
+**Examples:**
+
+```javascript
+// Get content about a topic
+await web_search_context({
+  query: "Brave LLM Context API documentation",
+  max_tokens: 4096,
+});
+
+// Comprehensive research with more sources
+await web_search_context({
+  query: "transformer architecture improvements 2025",
+  max_tokens: 16384,
+  max_urls: 30,
+  threshold: "lenient",
+});
+```
+
 ## web_fetch
 
 Fetch a URL and extract readable content.
@@ -261,5 +327,5 @@ Notes:
 - `web_fetch` is best-effort extraction; some sites will need the browser tool.
 - See [Firecrawl](/tools/firecrawl) for key setup and service details.
 - Responses are cached (default 15 minutes) to reduce repeated fetches.
-- If you use tool profiles/allowlists, add `web_search`/`web_fetch` or `group:web`.
-- If the Brave key is missing, `web_search` returns a short setup hint with a docs link.
+- If you use tool profiles/allowlists, add `web_search`/`web_fetch`/`web_search_context` or `group:web`.
+- If the Brave key is missing, `web_search` and `web_search_context` return a short setup hint with a docs link.
