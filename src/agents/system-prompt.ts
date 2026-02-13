@@ -261,6 +261,7 @@ export function buildAgentSystemPrompt(params: {
     exec: "Run shell commands (pty available for TTY-required CLIs)",
     process: "Manage background exec sessions",
     web_search: "Search the web (Brave API)",
+    web_search_context: "Retrieve LLM-optimized content chunks from web pages (Brave Context API)",
     web_fetch: "Fetch and extract readable content from a URL",
     // Channel docking: add login tools here when a channel needs interactive linking.
     browser: "Control web browser",
@@ -291,6 +292,7 @@ export function buildAgentSystemPrompt(params: {
     "exec",
     "process",
     "web_search",
+    "web_search_context",
     "web_fetch",
     "browser",
     "canvas",
