@@ -4,6 +4,7 @@ import type { AgentModelConfig, AgentSandboxConfig } from "./types.agents-shared
 import type { HumanDelayConfig, IdentityConfig } from "./types.base.js";
 import type { GroupChatConfig } from "./types.messages.js";
 import type { AgentToolsConfig, MemorySearchConfig } from "./types.tools.js";
+import type { WorkflowLaneConfig } from "./types.workflow-lane.js";
 
 export type AgentConfig = {
   id: string;
@@ -32,6 +33,8 @@ export type AgentConfig = {
   /** Optional per-agent stream params (e.g. cacheRetention, temperature). */
   params?: Record<string, unknown>;
   tools?: AgentToolsConfig;
+  /** Optional per-agent workflow lane policy override. */
+  workflowLane?: WorkflowLaneConfig;
 };
 
 export type AgentsConfig = {

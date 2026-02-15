@@ -5,6 +5,7 @@ import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import { isPlainObject } from "../utils.js";
 import { normalizeToolName } from "./tool-policy.js";
 import type { AnyAgentTool } from "./tools/common.js";
+import { evaluateWorkflowLaneGuard } from "./workflow-lane-policy.js";
 
 export type HookContext = {
   agentId?: string;
@@ -79,6 +80,17 @@ export async function runBeforeToolCallHook(args: {
 }): Promise<HookOutcome> {
   const toolName = normalizeToolName(args.toolName || "tool");
   const params = args.params;
+  const laneGuard = evaluateWorkflowLaneGuard({
+    toolName,
+    params,
+    ctx: args.ctx,
+  });
+  if (laneGuard.blocked) {
+    return {
+      blocked: true,
+      reason: laneGuard.reason || "Tool call blocked by workflow lane policy",
+    };
+  }
 
   if (args.ctx?.sessionKey) {
     const { getDiagnosticSessionState } = await import("../logging/diagnostic-session-state.js");

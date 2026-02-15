@@ -1,3 +1,4 @@
+import { applyRecommendedWorkflowLaneConfig } from "../../agents/workflow-lane-presets.js";
 import { formatCliCommand } from "../../cli/command-format.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { resolveGatewayPort, writeConfigFile } from "../../config/config.js";
@@ -77,6 +78,7 @@ export async function runNonInteractiveOnboardingLocal(params: {
 
   nextConfig = applyNonInteractiveSkillsConfig({ nextConfig, opts, runtime });
 
+  nextConfig = applyRecommendedWorkflowLaneConfig(nextConfig);
   nextConfig = applyWizardMetadata(nextConfig, { command: "onboard", mode });
   await writeConfigFile(nextConfig);
   logConfigUpdated(runtime);

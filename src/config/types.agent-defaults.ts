@@ -7,6 +7,7 @@ import type {
   TypingMode,
 } from "./types.base.js";
 import type { MemorySearchConfig } from "./types.tools.js";
+import type { WorkflowLaneConfig } from "./types.workflow-lane.js";
 
 export type AgentModelEntryConfig = {
   alias?: string;
@@ -254,6 +255,8 @@ export type AgentDefaultsConfig = {
   };
   /** Optional sandbox settings for non-main sessions. */
   sandbox?: AgentSandboxConfig;
+  /** Optional workflow lane policy (ANCHOR → EXECUTE → REVIEW → VERIFY → GATE). */
+  workflowLane?: WorkflowLaneConfig;
 };
 
 export type AgentCompactionMode = "default" | "safeguard";

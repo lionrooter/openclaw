@@ -313,8 +313,13 @@ export async function runOnboardingWizard(
 
   if (mode === "remote") {
     const { promptRemoteGatewayConfig } = await import("../commands/onboard-remote.js");
+    const { applyRecommendedWorkflowLaneConfig } = await import(
+      "../agents/workflow-lane-presets.js"
+    );
     const { logConfigUpdated } = await import("../config/logging.js");
-    let nextConfig = await promptRemoteGatewayConfig(baseConfig, prompter);
+    let nextConfig = applyRecommendedWorkflowLaneConfig(
+      await promptRemoteGatewayConfig(baseConfig, prompter),
+    );
     nextConfig = onboardHelpers.applyWizardMetadata(nextConfig, { command: "onboard", mode });
     await writeConfigFile(nextConfig);
     logConfigUpdated(runtime);
@@ -333,8 +338,10 @@ export async function runOnboardingWizard(
 
   const workspaceDir = resolveUserPath(workspaceInput.trim() || onboardHelpers.DEFAULT_WORKSPACE);
 
+  const { applyRecommendedWorkflowLaneConfig } = await import("../agents/workflow-lane-presets.js");
   const { applyOnboardingLocalWorkspaceConfig } = await import("../commands/onboard-config.js");
   let nextConfig: OpenClawConfig = applyOnboardingLocalWorkspaceConfig(baseConfig, workspaceDir);
+  nextConfig = applyRecommendedWorkflowLaneConfig(nextConfig);
 
   const { ensureAuthProfileStore } = await import("../agents/auth-profiles.js");
   const { promptAuthChoiceGrouped } = await import("../commands/auth-choice-prompt.js");
@@ -429,6 +436,7 @@ export async function runOnboardingWizard(
     });
   }
 
+  nextConfig = applyRecommendedWorkflowLaneConfig(nextConfig);
   await writeConfigFile(nextConfig);
   const { logConfigUpdated } = await import("../config/logging.js");
   logConfigUpdated(runtime);
@@ -447,6 +455,7 @@ export async function runOnboardingWizard(
   const { setupInternalHooks } = await import("../commands/onboard-hooks.js");
   nextConfig = await setupInternalHooks(nextConfig, runtime, prompter);
 
+  nextConfig = applyRecommendedWorkflowLaneConfig(nextConfig);
   nextConfig = onboardHelpers.applyWizardMetadata(nextConfig, { command: "onboard", mode });
   await writeConfigFile(nextConfig);
 
