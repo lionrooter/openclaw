@@ -81,11 +81,28 @@ function looksLikeEnvRef(value: string): boolean {
 
 function isGatewayRemotelyExposed(cfg: OpenClawConfig): boolean {
   const bind = typeof cfg.gateway?.bind === "string" ? cfg.gateway.bind : "loopback";
-  if (bind !== "loopback") {
+  if (bind === "lan" || bind === "tailnet") {
+    return true;
+  }
+  if (bind === "custom") {
+    const host =
+      typeof cfg.gateway?.customBindHost === "string" ? cfg.gateway.customBindHost.trim() : "";
+    if (host === "127.0.0.1" || host === "::1" || host === "localhost") {
+      return false;
+    }
     return true;
   }
   const tailscaleMode = cfg.gateway?.tailscale?.mode ?? "off";
   return tailscaleMode === "serve" || tailscaleMode === "funnel";
+}
+
+function normalizeNonEmptyStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .filter((entry) => entry.length > 0);
 }
 
 type ModelRef = { id: string; source: string };
@@ -508,6 +525,53 @@ export function collectHooksHardeningFindings(
   return findings;
 }
 
+export function collectHooksUnsafeExternalContentFindings(
+  cfg: OpenClawConfig,
+): SecurityAuditFinding[] {
+  const findings: SecurityAuditFinding[] = [];
+  if (cfg.hooks?.enabled !== true) {
+    return findings;
+  }
+
+  const remoteExposure = isGatewayRemotelyExposed(cfg);
+  const severity: SecurityAuditFinding["severity"] = remoteExposure ? "critical" : "warn";
+  if (cfg.hooks?.gmail?.allowUnsafeExternalContent === true) {
+    findings.push({
+      checkId: "hooks.gmail.allow_unsafe_external_content",
+      severity,
+      title: "Gmail hook bypasses external-content safety wrapping",
+      detail:
+        "hooks.gmail.allowUnsafeExternalContent=true disables external-content safety wrapping for Gmail hook traffic.",
+      remediation:
+        "Set hooks.gmail.allowUnsafeExternalContent=false (recommended) and keep external-content wrapping enabled.",
+    });
+  }
+
+  const mappings = Array.isArray(cfg.hooks?.mappings) ? cfg.hooks.mappings : [];
+  const unsafeMappings = mappings
+    .map((mapping, index) => ({
+      index,
+      id: typeof mapping?.id === "string" ? mapping.id.trim() : "",
+      unsafe: mapping?.allowUnsafeExternalContent === true,
+    }))
+    .filter((entry) => entry.unsafe)
+    .map((entry) => (entry.id ? entry.id : `index:${entry.index}`));
+  if (unsafeMappings.length > 0) {
+    findings.push({
+      checkId: "hooks.mappings.allow_unsafe_external_content",
+      severity,
+      title: "Hook mappings bypass external-content safety wrapping",
+      detail:
+        "hooks.mappings[].allowUnsafeExternalContent=true disables external-content safety wrapping for mapped hook routes.\n" +
+        unsafeMappings.map((entry) => `- ${entry}`).join("\n"),
+      remediation:
+        "Set hooks.mappings[].allowUnsafeExternalContent=false for all mappings that process external/untrusted content.",
+    });
+  }
+
+  return findings;
+}
+
 export function collectGatewayHttpSessionKeyOverrideFindings(
   cfg: OpenClawConfig,
 ): SecurityAuditFinding[] {
@@ -531,6 +595,49 @@ export function collectGatewayHttpSessionKeyOverrideFindings(
       `${enabledEndpoints.join(", ")} accept x-openclaw-session-key for per-request session routing. ` +
       "Treat API credential holders as trusted principals.",
   });
+
+  return findings;
+}
+
+export function collectGatewayOpenResponsesUrlAllowlistFindings(
+  cfg: OpenClawConfig,
+): SecurityAuditFinding[] {
+  const findings: SecurityAuditFinding[] = [];
+  const responses = cfg.gateway?.http?.endpoints?.responses;
+  if (responses?.enabled !== true) {
+    return findings;
+  }
+
+  const remoteExposure = isGatewayRemotelyExposed(cfg);
+  const severity: SecurityAuditFinding["severity"] = remoteExposure ? "critical" : "warn";
+
+  const filesAllowUrl = responses.files?.allowUrl !== false;
+  const filesAllowlist = normalizeNonEmptyStringList(responses.files?.urlAllowlist);
+  if (filesAllowUrl && filesAllowlist.length === 0) {
+    findings.push({
+      checkId: "gateway.http.responses.files.url_allowlist_missing",
+      severity,
+      title: "OpenResponses file URL fetch is enabled without allowlist",
+      detail:
+        "gateway.http.endpoints.responses.files.allowUrl is enabled (or default-enabled), but files.urlAllowlist is unset/empty.",
+      remediation:
+        "Set gateway.http.endpoints.responses.files.urlAllowlist to trusted hostnames (recommended), or set files.allowUrl=false.",
+    });
+  }
+
+  const imagesAllowUrl = responses.images?.allowUrl !== false;
+  const imagesAllowlist = normalizeNonEmptyStringList(responses.images?.urlAllowlist);
+  if (imagesAllowUrl && imagesAllowlist.length === 0) {
+    findings.push({
+      checkId: "gateway.http.responses.images.url_allowlist_missing",
+      severity,
+      title: "OpenResponses image URL fetch is enabled without allowlist",
+      detail:
+        "gateway.http.endpoints.responses.images.allowUrl is enabled (or default-enabled), but images.urlAllowlist is unset/empty.",
+      remediation:
+        "Set gateway.http.endpoints.responses.images.urlAllowlist to trusted hostnames (recommended), or set images.allowUrl=false.",
+    });
+  }
 
   return findings;
 }
