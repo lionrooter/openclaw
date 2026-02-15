@@ -9,6 +9,8 @@ import {
 
 describe("workflow lane presets", () => {
   it("resolves known domain-agent mappings", () => {
+    expect(resolveWorkflowLaneDomainForAgent("main")).toBe("ops");
+    expect(resolveWorkflowLaneDomainForAgent("clawdy")).toBe("ops");
     expect(resolveWorkflowLaneDomainForAgent("cody")).toBe("coding");
     expect(resolveWorkflowLaneDomainForAgent("leo")).toBe("strategy");
     expect(resolveWorkflowLaneDomainForAgent("projel")).toBe("project-lead");
