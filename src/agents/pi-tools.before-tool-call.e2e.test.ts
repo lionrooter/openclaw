@@ -2,10 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import { toClientToolDefinitions, toToolDefinitions } from "./pi-tool-definition-adapter.js";
 import { wrapToolWithBeforeToolCallHook } from "./pi-tools.before-tool-call.js";
+import { evaluateWorkflowLaneGuard } from "./workflow-lane-policy.js";
 
 vi.mock("../plugins/hook-runner-global.js");
+vi.mock("./workflow-lane-policy.js", () => ({
+  evaluateWorkflowLaneGuard: vi.fn(() => ({ blocked: false })),
+}));
 
 const mockGetGlobalHookRunner = vi.mocked(getGlobalHookRunner);
+const mockEvaluateWorkflowLaneGuard = vi.mocked(evaluateWorkflowLaneGuard);
 
 describe("before_tool_call hook integration", () => {
   let hookRunner: {
@@ -14,6 +19,8 @@ describe("before_tool_call hook integration", () => {
   };
 
   beforeEach(() => {
+    mockEvaluateWorkflowLaneGuard.mockReset();
+    mockEvaluateWorkflowLaneGuard.mockReturnValue({ blocked: false });
     hookRunner = {
       hasHooks: vi.fn(),
       runBeforeToolCall: vi.fn(),
@@ -68,6 +75,106 @@ describe("before_tool_call hook integration", () => {
       "blocked",
     );
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("blocks mutation before execution when workflow lane guard blocks", async () => {
+    hookRunner.hasHooks.mockReturnValue(true);
+    mockEvaluateWorkflowLaneGuard.mockReturnValue({
+      blocked: true,
+      reason: "Workflow lane gate: missing ANCHOR.",
+    });
+    const execute = vi.fn().mockResolvedValue({ content: [], details: { ok: true } });
+    // oxlint-disable-next-line typescript/no-explicit-any
+    const tool = wrapToolWithBeforeToolCallHook({ name: "write", execute } as any, {
+      agentId: "cody",
+      sessionKey: "agent:cody:main",
+    });
+
+    await expect(
+      tool.execute("call-lane-block", { path: "src/main.ts", content: "x" }, undefined, undefined),
+    ).rejects.toThrow("Workflow lane gate: missing ANCHOR.");
+    expect(execute).not.toHaveBeenCalled();
+    expect(hookRunner.runBeforeToolCall).not.toHaveBeenCalled();
+  });
+
+  it("allows mutation after ANCHOR/REVIEW/VERIFY progression through hook wiring", async () => {
+    hookRunner.hasHooks.mockReturnValue(false);
+    const stage = {
+      anchor: false,
+      review: false,
+      verify: false,
+    };
+    mockEvaluateWorkflowLaneGuard.mockImplementation(({ toolName, params }) => {
+      const payload = params && typeof params === "object" ? params : {};
+      const command =
+        payload &&
+        typeof payload === "object" &&
+        "command" in payload &&
+        typeof payload.command === "string"
+          ? payload.command
+          : "";
+
+      if (toolName === "exec") {
+        if (command.includes("context_builder")) {
+          stage.anchor = true;
+        }
+        if (command.includes("rp-cli review")) {
+          stage.review = true;
+        }
+        if (/\bpnpm\b/.test(command) && /\btest\b/.test(command)) {
+          stage.verify = true;
+        }
+        return { blocked: false };
+      }
+
+      if (toolName === "write" && (!stage.anchor || !stage.review || !stage.verify)) {
+        const missing = !stage.anchor ? "ANCHOR" : !stage.review ? "REVIEW" : "VERIFY";
+        return { blocked: true, reason: `Workflow lane gate: missing ${missing}.` };
+      }
+
+      return { blocked: false };
+    });
+
+    const exec = vi.fn().mockResolvedValue({ content: [], details: { ok: true } });
+    const write = vi.fn().mockResolvedValue({ content: [], details: { ok: true } });
+    // oxlint-disable-next-line typescript/no-explicit-any
+    const execTool = wrapToolWithBeforeToolCallHook({ name: "exec", execute: exec } as any, {
+      agentId: "cody",
+      sessionKey: "agent:cody:main",
+    });
+    // oxlint-disable-next-line typescript/no-explicit-any
+    const writeTool = wrapToolWithBeforeToolCallHook({ name: "write", execute: write } as any, {
+      agentId: "cody",
+      sessionKey: "agent:cody:main",
+    });
+
+    await expect(
+      writeTool.execute(
+        "call-write-pre",
+        { path: "src/main.ts", content: "x" },
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow("missing ANCHOR");
+
+    await execTool.execute(
+      "call-anchor",
+      { command: 'rp-cli context_builder task="x"' },
+      undefined,
+      undefined,
+    );
+    await execTool.execute("call-review", { command: "rp-cli review" }, undefined, undefined);
+    await execTool.execute("call-verify", { command: "pnpm -w test" }, undefined, undefined);
+
+    await expect(
+      writeTool.execute(
+        "call-write-post",
+        { path: "src/main.ts", content: "ok" },
+        undefined,
+        undefined,
+      ),
+    ).resolves.toEqual({ content: [], details: { ok: true } });
+    expect(write).toHaveBeenCalledTimes(1);
   });
 
   it("continues execution when hook throws", async () => {
