@@ -10,7 +10,6 @@ import UserNotifications
 private struct NotificationCallError: Error, Sendable {
     let message: String
 }
-
 // Ensures notification requests return promptly even if the system prompt blocks.
 private final class NotificationInvokeLatch<T: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
@@ -37,7 +36,6 @@ private final class NotificationInvokeLatch<T: Sendable>: @unchecked Sendable {
         cont?.resume(returning: response)
     }
 }
-
 @MainActor
 @Observable
 final class NodeAppModel {
@@ -53,6 +51,8 @@ final class NodeAppModel {
     private let camera: any CameraServicing
     private let screenRecorder: any ScreenRecordingServicing
     var gatewayStatusText: String = "Offline"
+    var nodeStatusText: String = "Offline"
+    var operatorStatusText: String = "Offline"
     var gatewayServerName: String?
     var gatewayRemoteAddress: String?
     var connectedGatewayID: String?
@@ -340,6 +340,7 @@ final class NodeAppModel {
     }
 
     func setTalkEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: "talk.enabled")
         if enabled {
             // Voice wake holds the microphone continuously; talk mode needs exclusive access for STT.
             // When talk is enabled from the UI, prioritize talk and pause voice wake.
@@ -351,6 +352,11 @@ final class NodeAppModel {
             self.talkVoiceWakeSuspended = false
         }
         self.talkMode.setEnabled(enabled)
+        Task { [weak self] in
+            await self?.pushTalkModeToGateway(
+                enabled: enabled,
+                phase: enabled ? "enabled" : "disabled")
+        }
     }
 
     func requestLocationPermissions(mode: OpenClawLocationMode) async -> Bool {
@@ -479,14 +485,47 @@ final class NodeAppModel {
             let stream = await self.operatorGateway.subscribeServerEvents(bufferingNewest: 200)
             for await evt in stream {
                 if Task.isCancelled { return }
-                guard evt.event == "voicewake.changed" else { continue }
                 guard let payload = evt.payload else { continue }
-                struct Payload: Decodable { var triggers: [String] }
-                guard let decoded = try? GatewayPayloadDecoding.decode(payload, as: Payload.self) else { continue }
-                let triggers = VoiceWakePreferences.sanitizeTriggerWords(decoded.triggers)
-                VoiceWakePreferences.saveTriggerWords(triggers)
+                switch evt.event {
+                case "voicewake.changed":
+                    struct Payload: Decodable { var triggers: [String] }
+                    guard let decoded = try? GatewayPayloadDecoding.decode(payload, as: Payload.self) else { continue }
+                    let triggers = VoiceWakePreferences.sanitizeTriggerWords(decoded.triggers)
+                    VoiceWakePreferences.saveTriggerWords(triggers)
+                case "talk.mode":
+                    struct Payload: Decodable {
+                        var enabled: Bool
+                        var phase: String?
+                    }
+                    guard let decoded = try? GatewayPayloadDecoding.decode(payload, as: Payload.self) else { continue }
+                    self.applyTalkModeSync(enabled: decoded.enabled, phase: decoded.phase)
+                default:
+                    continue
+                }
             }
         }
+    }
+
+    private func applyTalkModeSync(enabled: Bool, phase: String?) {
+        _ = phase
+        guard self.talkMode.isEnabled != enabled else { return }
+        self.setTalkEnabled(enabled)
+    }
+
+    private func pushTalkModeToGateway(enabled: Bool, phase: String?) async {
+        guard await self.isOperatorConnected() else { return }
+        struct TalkModePayload: Encodable {
+            var enabled: Bool
+            var phase: String?
+        }
+        let payload = TalkModePayload(enabled: enabled, phase: phase)
+        guard let data = try? JSONEncoder().encode(payload),
+              let json = String(data: data, encoding: .utf8)
+        else { return }
+        _ = try? await self.operatorGateway.request(
+            method: "talk.mode",
+            paramsJSON: json,
+            timeoutSeconds: 8)
     }
 
     private func startGatewayHealthMonitor() {
@@ -1671,12 +1710,13 @@ private extension NodeAppModel {
                                 self.screen.errorText = nil
                                 UserDefaults.standard.set(true, forKey: "gateway.autoconnect")
                             }
-                            GatewayDiagnostics.log(
-                                "gateway connected host=\(url.host ?? "?") scheme=\(url.scheme ?? "?")")
+                            GatewayDiagnostics.log("gateway connected host=\(url.host ?? "?") scheme=\(url.scheme ?? "?")")
                             if let addr = await self.nodeGateway.currentRemoteAddress() {
                                 await MainActor.run { self.gatewayRemoteAddress = addr }
                             }
                             await self.showA2UIOnConnectIfNeeded()
+                            await self.onNodeGatewayConnected()
+                            await MainActor.run { SignificantLocationMonitor.startIfNeeded(locationService: self.locationService, locationMode: self.locationMode(), gateway: self.nodeGateway) }
                         },
                         onDisconnected: { [weak self] reason in
                             guard let self else { return }
@@ -1777,6 +1817,17 @@ private extension NodeAppModel {
     }
 }
 
+extension NodeAppModel {
+    func reloadTalkConfig() {
+        Task { [weak self] in
+            await self?.talkMode.reloadConfig()
+        }
+    }
+
+    /// Back-compat hook retained for older gateway-connect flows.
+    func onNodeGatewayConnected() async {}
+}
+
 #if DEBUG
 extension NodeAppModel {
     func _test_handleInvoke(_ req: BridgeInvokeRequest) async -> BridgeInvokeResponse {
@@ -1809,6 +1860,10 @@ extension NodeAppModel {
 
     func _test_showLocalCanvasOnDisconnect() {
         self.showLocalCanvasOnDisconnect()
+    }
+
+    func _test_applyTalkModeSync(enabled: Bool, phase: String? = nil) {
+        self.applyTalkModeSync(enabled: enabled, phase: phase)
     }
 }
 #endif
