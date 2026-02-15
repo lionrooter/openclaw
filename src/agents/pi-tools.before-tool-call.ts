@@ -3,6 +3,7 @@ import { createSubsystemLogger } from "../logging/subsystem.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import { isPlainObject } from "../utils.js";
 import { normalizeToolName } from "./tool-policy.js";
+import { evaluateWorkflowLaneGuard } from "./workflow-lane-policy.js";
 
 type HookContext = {
   agentId?: string;
@@ -24,6 +25,17 @@ export async function runBeforeToolCallHook(args: {
 }): Promise<HookOutcome> {
   const toolName = normalizeToolName(args.toolName || "tool");
   const params = args.params;
+  const laneGuard = evaluateWorkflowLaneGuard({
+    toolName,
+    params,
+    ctx: args.ctx,
+  });
+  if (laneGuard.blocked) {
+    return {
+      blocked: true,
+      reason: laneGuard.reason || "Tool call blocked by workflow lane policy",
+    };
+  }
 
   const hookRunner = getGlobalHookRunner();
   if (!hookRunner?.hasHooks("before_tool_call")) {

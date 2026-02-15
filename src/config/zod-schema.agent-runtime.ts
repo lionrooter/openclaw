@@ -371,6 +371,57 @@ export const AgentSandboxSchema = z
   .strict()
   .optional();
 
+export const WorkflowLaneDomainSchema = z
+  .union([
+    z.literal("coding"),
+    z.literal("strategy"),
+    z.literal("creative"),
+    z.literal("growth"),
+    z.literal("infra"),
+    z.literal("life"),
+    z.literal("family"),
+    z.literal("finance"),
+    z.literal("project-lead"),
+    z.literal("ops"),
+  ])
+  .optional();
+
+export const WorkflowLaneSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    mode: z.union([z.literal("hard"), z.literal("soft")]).optional(),
+    applyWhen: z.union([z.literal("dev-intent"), z.literal("always")]).optional(),
+    domain: WorkflowLaneDomainSchema,
+    requiredStages: z
+      .object({
+        anchor: z.boolean().optional(),
+        review: z.boolean().optional(),
+        verify: z.boolean().optional(),
+        gate: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    stageChecks: z
+      .object({
+        anchor: z.array(z.string()).optional(),
+        review: z.array(z.string()).optional(),
+        verify: z.array(z.string()).optional(),
+        gate: z.array(z.string()).optional(),
+      })
+      .strict()
+      .optional(),
+    mutationPolicy: z
+      .object({
+        blockBeforeAnchor: z.boolean().optional(),
+        blockBeforeReview: z.boolean().optional(),
+        blockBeforeVerify: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .optional();
+
 export const AgentToolsSchema = z
   .object({
     profile: ToolProfileSchema,
@@ -552,6 +603,7 @@ export const AgentEntrySchema = z
       .optional(),
     sandbox: AgentSandboxSchema,
     tools: AgentToolsSchema,
+    workflowLane: WorkflowLaneSchema,
   })
   .strict();
 

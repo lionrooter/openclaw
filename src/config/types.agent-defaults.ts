@@ -11,6 +11,7 @@ import type {
   SandboxPruneSettings,
 } from "./types.sandbox.js";
 import type { MemorySearchConfig } from "./types.tools.js";
+import type { WorkflowLaneConfig } from "./types.workflow-lane.js";
 
 export type AgentModelEntryConfig = {
   alias?: string;
@@ -275,6 +276,8 @@ export type AgentDefaultsConfig = {
     /** Auto-prune sandbox containers. */
     prune?: SandboxPruneSettings;
   };
+  /** Optional workflow lane policy (ANCHOR → EXECUTE → REVIEW → VERIFY → GATE). */
+  workflowLane?: WorkflowLaneConfig;
 };
 
 export type AgentCompactionMode = "default" | "safeguard";

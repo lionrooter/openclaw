@@ -8,6 +8,7 @@ import type {
   SandboxPruneSettings,
 } from "./types.sandbox.js";
 import type { AgentToolsConfig, MemorySearchConfig } from "./types.tools.js";
+import type { WorkflowLaneConfig } from "./types.workflow-lane.js";
 
 export type AgentModelConfig =
   | string
@@ -63,6 +64,8 @@ export type AgentConfig = {
     prune?: SandboxPruneSettings;
   };
   tools?: AgentToolsConfig;
+  /** Optional per-agent workflow lane policy override. */
+  workflowLane?: WorkflowLaneConfig;
 };
 
 export type AgentsConfig = {
