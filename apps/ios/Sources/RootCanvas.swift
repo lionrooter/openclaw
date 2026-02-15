@@ -65,6 +65,9 @@ struct RootCanvas: View {
             switch sheet {
             case .settings:
                 SettingsTab()
+                    .environment(self.appModel)
+                    .environment(self.appModel.voiceWake)
+                    .environment(self.gatewayController)
             case .chat:
                 ChatSheet(
                     // Mobile chat UI should use the node role RPC surface (chat.* / sessions.*)
