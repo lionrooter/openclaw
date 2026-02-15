@@ -21,7 +21,9 @@ import {
   collectExposureMatrixFindings,
   collectGatewayHttpNoAuthFindings,
   collectGatewayHttpSessionKeyOverrideFindings,
+  collectGatewayOpenResponsesUrlAllowlistFindings,
   collectHooksHardeningFindings,
+  collectHooksUnsafeExternalContentFindings,
   collectIncludeFilePermFindings,
   collectInstalledSkillsCodeSafetyFindings,
   collectSandboxBrowserHashLabelFindings,
@@ -856,7 +858,9 @@ export async function runSecurityAudit(opts: SecurityAuditOptions): Promise<Secu
   findings.push(...collectExecRuntimeFindings(cfg));
   findings.push(...collectHooksHardeningFindings(cfg, env));
   findings.push(...collectGatewayHttpNoAuthFindings(cfg, env));
+  findings.push(...collectHooksUnsafeExternalContentFindings(cfg));
   findings.push(...collectGatewayHttpSessionKeyOverrideFindings(cfg));
+  findings.push(...collectGatewayOpenResponsesUrlAllowlistFindings(cfg));
   findings.push(...collectSandboxDockerNoopFindings(cfg));
   findings.push(...collectSandboxDangerousConfigFindings(cfg));
   findings.push(...collectNodeDenyCommandPatternFindings(cfg));

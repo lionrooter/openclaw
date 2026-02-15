@@ -35,6 +35,8 @@ It also warns when npm-based plugin/hook install records are unpinned, missing i
 It warns when channel allowlists rely on mutable names/emails/tags instead of stable IDs (Discord, Slack, Google Chat, MS Teams, Mattermost, IRC scopes where applicable).
 It warns when `gateway.auth.mode="none"` leaves Gateway HTTP APIs reachable without a shared secret (`/tools/invoke` plus any enabled `/v1/*` endpoint).
 Settings prefixed with `dangerous`/`dangerously` are explicit break-glass operator overrides; enabling one is not, by itself, a security vulnerability report.
+It also flags unsafe external-content bypass settings for hooks (`hooks.gmail.allowUnsafeExternalContent=true` and `hooks.mappings[].allowUnsafeExternalContent=true`), with higher severity when the gateway is remotely exposed.
+It also flags permissive OpenResponses URL ingestion when `/v1/responses` is enabled with URL fetch allowed but no `urlAllowlist` on `files`/`images`.
 
 ## JSON output
 
