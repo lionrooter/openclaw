@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { validateConfigObject } from "./config.js";
 
 describe("config schema regressions", () => {
+  const validWorkflowLane = {
+    enabled: true,
+    mode: "hard",
+    applyWhen: "always",
+    domain: "ops",
+  } as const;
+
   it("accepts nested telegram groupPolicy overrides", () => {
     const res = validateConfigObject({
       channels: {
@@ -89,6 +96,72 @@ describe("config schema regressions", () => {
     expect(res.ok).toBe(false);
     if (!res.ok) {
       expect(res.issues[0]?.path).toBe("channels.imessage.attachmentRoots.0");
+    }
+  });
+
+  it("rejects invalid workflowLane.domain values", () => {
+    const res = validateConfigObject({
+      agents: {
+        defaults: {
+          workflowLane: {
+            ...validWorkflowLane,
+            domain: "toString",
+          },
+        },
+      },
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.issues.some((issue) => issue.path === "agents.defaults.workflowLane.domain")).toBe(
+        true,
+      );
+    }
+  });
+
+  it("rejects invalid workflowLane.mode values", () => {
+    const res = validateConfigObject({
+      agents: {
+        list: [
+          {
+            id: "main",
+            workflowLane: {
+              ...validWorkflowLane,
+              mode: "disabled",
+            },
+          },
+        ],
+      },
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.issues.some((issue) => issue.path === "agents.list.0.workflowLane.mode")).toBe(
+        true,
+      );
+    }
+  });
+
+  it("rejects invalid workflowLane.applyWhen values", () => {
+    const res = validateConfigObject({
+      agents: {
+        list: [
+          {
+            id: "main",
+            workflowLane: {
+              ...validWorkflowLane,
+              applyWhen: "sometimes",
+            },
+          },
+        ],
+      },
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(
+        res.issues.some((issue) => issue.path === "agents.list.0.workflowLane.applyWhen"),
+      ).toBe(true);
     }
   });
 });
