@@ -7,7 +7,9 @@ import type {
 import { normalizeAgentId } from "../routing/session-key.js";
 
 export const WORKFLOW_LANE_AGENT_DOMAIN_DEFAULTS: Readonly<Record<string, WorkflowLaneDomain>> = {
-  main: "coding",
+  // In Lionroot, `main` is the Clawdy orchestrator (Command Post), not the coding agent.
+  main: "ops",
+  clawdy: "ops",
   cody: "coding",
   leo: "strategy",
   artie: "creative",
