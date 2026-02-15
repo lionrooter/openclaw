@@ -11,6 +11,7 @@ import {
   parseIdentityMarkdown as parseIdentityMarkdownFile,
 } from "../agents/identity-file.js";
 import type { OpenClawConfig } from "../config/config.js";
+import { applyRecommendedWorkflowLaneToAgentEntry } from "../agents/workflow-lane-presets.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 
 export type AgentSummary = {
@@ -138,13 +139,13 @@ export function applyAgentConfig(
   const list = listAgentEntries(cfg);
   const index = findAgentEntryIndex(list, agentId);
   const base = index >= 0 ? list[index] : { id: agentId };
-  const nextEntry: AgentEntry = {
+  const nextEntry = applyRecommendedWorkflowLaneToAgentEntry({
     ...base,
     ...(name ? { name } : {}),
     ...(params.workspace ? { workspace: params.workspace } : {}),
     ...(params.agentDir ? { agentDir: params.agentDir } : {}),
     ...(params.model ? { model: params.model } : {}),
-  };
+  });
   const nextList = [...list];
   if (index >= 0) {
     nextList[index] = nextEntry;

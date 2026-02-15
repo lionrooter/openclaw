@@ -4,6 +4,7 @@ import {
   AgentSandboxSchema,
   AgentModelSchema,
   MemorySearchSchema,
+  WorkflowLaneSchema,
 } from "./zod-schema.agent-runtime.js";
 import {
   BlockStreamingChunkSchema,
@@ -168,6 +169,7 @@ export const AgentDefaultsSchema = z
       .strict()
       .optional(),
     sandbox: AgentSandboxSchema,
+    workflowLane: WorkflowLaneSchema,
   })
   .strict()
   .optional();

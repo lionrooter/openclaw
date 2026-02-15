@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import JSON5 from "json5";
+import { applyRecommendedWorkflowLaneConfig } from "../agents/workflow-lane-presets.js";
 import { DEFAULT_AGENT_WORKSPACE_DIR, ensureAgentWorkspace } from "../agents/workspace.js";
 import { type OpenClawConfig, createConfigIO, writeConfigFile } from "../config/config.js";
 import { formatConfigPath, logConfigUpdated } from "../config/logging.js";
@@ -41,7 +42,7 @@ export async function setupCommand(
 
   const workspace = desiredWorkspace ?? defaults.workspace ?? DEFAULT_AGENT_WORKSPACE_DIR;
 
-  const next: OpenClawConfig = {
+  const next: OpenClawConfig = applyRecommendedWorkflowLaneConfig({
     ...cfg,
     agents: {
       ...cfg.agents,
@@ -50,14 +51,19 @@ export async function setupCommand(
         workspace,
       },
     },
-  };
+  });
+  const configChanged = JSON.stringify(next) !== JSON.stringify(cfg);
 
-  if (!existingRaw.exists || defaults.workspace !== workspace) {
+  if (!existingRaw.exists || configChanged) {
     await writeConfigFile(next);
     if (!existingRaw.exists) {
       runtime.log(`Wrote ${formatConfigPath(configPath)}`);
     } else {
-      logConfigUpdated(runtime, { path: configPath, suffix: "(set agents.defaults.workspace)" });
+      const suffix =
+        defaults.workspace !== workspace
+          ? "(set agents.defaults.workspace)"
+          : "(set workflow lane defaults)";
+      logConfigUpdated(runtime, { path: configPath, suffix });
     }
   } else {
     runtime.log(`Config OK: ${formatConfigPath(configPath)}`);

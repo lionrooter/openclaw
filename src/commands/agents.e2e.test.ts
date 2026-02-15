@@ -80,6 +80,27 @@ describe("agents helpers", () => {
     expect(work?.model).toBe("anthropic/claude");
   });
 
+  it("applyAgentConfig adds recommended workflow lane for known domain agents", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        list: [{ id: "main" }],
+      },
+    };
+
+    const next = applyAgentConfig(cfg, {
+      agentId: "leo",
+      name: "Leo",
+    });
+
+    const leo = next.agents?.list?.find((agent) => agent.id === "leo");
+    expect(leo?.workflowLane).toEqual({
+      enabled: true,
+      mode: "hard",
+      domain: "strategy",
+      applyWhen: "always",
+    });
+  });
+
   it("applyAgentBindings skips duplicates and reports conflicts", () => {
     const cfg: OpenClawConfig = {
       bindings: [

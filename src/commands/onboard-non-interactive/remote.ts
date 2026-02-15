@@ -1,3 +1,5 @@
+import type { OnboardOptions } from "../onboard-types.js";
+import { applyRecommendedWorkflowLaneConfig } from "../../agents/workflow-lane-presets.js";
 import { formatCliCommand } from "../../cli/command-format.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { writeConfigFile } from "../../config/config.js";
@@ -32,6 +34,7 @@ export async function runNonInteractiveOnboardingRemote(params: {
       },
     },
   };
+  nextConfig = applyRecommendedWorkflowLaneConfig(nextConfig);
   nextConfig = applyWizardMetadata(nextConfig, { command: "onboard", mode });
   await writeConfigFile(nextConfig);
   logConfigUpdated(runtime);

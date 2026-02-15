@@ -1,3 +1,9 @@
+import type {
+  ChannelsWizardMode,
+  ConfigureWizardParams,
+  WizardSection,
+} from "./configure.shared.js";
+import { applyRecommendedWorkflowLaneConfig } from "../agents/workflow-lane-presets.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { readConfigFileSnapshot, resolveGatewayPort, writeConfigFile } from "../config/config.js";
@@ -282,6 +288,7 @@ export async function runConfigureWizard(
 
     if (mode === "remote") {
       let remoteConfig = await promptRemoteGatewayConfig(baseConfig, prompter);
+      remoteConfig = applyRecommendedWorkflowLaneConfig(remoteConfig);
       remoteConfig = applyWizardMetadata(remoteConfig, {
         command: opts.command,
         mode,
@@ -292,7 +299,7 @@ export async function runConfigureWizard(
       return;
     }
 
-    let nextConfig = { ...baseConfig };
+    let nextConfig = applyRecommendedWorkflowLaneConfig({ ...baseConfig });
     let didSetGatewayMode = false;
     if (nextConfig.gateway?.mode !== "local") {
       nextConfig = {
@@ -315,6 +322,7 @@ export async function runConfigureWizard(
       process.env.OPENCLAW_GATEWAY_TOKEN;
 
     const persistConfig = async () => {
+      nextConfig = applyRecommendedWorkflowLaneConfig(nextConfig);
       nextConfig = applyWizardMetadata(nextConfig, {
         command: opts.command,
         mode,

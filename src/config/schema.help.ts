@@ -173,6 +173,10 @@ export const FIELD_HELP: Record<string, string> = {
     "Max total characters across all injected workspace bootstrap files (default: 150000).",
   "agents.defaults.repoRoot":
     "Optional repository root shown in the system prompt runtime line (overrides auto-detect).",
+  "agents.defaults.workflowLane":
+    "Workflow lane policy (ANCHOR → EXECUTE → REVIEW → VERIFY → GATE) for runtime gating and stage checks.",
+  "agents.list.*.workflowLane":
+    "Per-agent workflow lane override (domain, stage requirements, and hard/soft enforcement).",
   "agents.defaults.envelopeTimezone":
     'Timezone for message envelopes ("utc", "local", "user", or an IANA timezone string).',
   "agents.defaults.envelopeTimestamp":
