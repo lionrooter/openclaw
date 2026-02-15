@@ -1604,6 +1604,149 @@ describe("security audit", () => {
     );
   });
 
+  it("flags unsafe hook external-content bypass settings", async () => {
+    const cfg: OpenClawConfig = {
+      hooks: {
+        enabled: true,
+        token: "shared-gateway-token-1234567890",
+        defaultSessionKey: "hook:ingress",
+        gmail: { allowUnsafeExternalContent: true },
+        mappings: [
+          { id: "gmail-agent", allowUnsafeExternalContent: true },
+          { allowUnsafeExternalContent: true },
+        ],
+      },
+    };
+
+    const res = await runSecurityAudit({
+      config: cfg,
+      includeFilesystem: false,
+      includeChannelSecurity: false,
+    });
+
+    expect(res.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checkId: "hooks.gmail.allow_unsafe_external_content",
+          severity: "warn",
+        }),
+        expect.objectContaining({
+          checkId: "hooks.mappings.allow_unsafe_external_content",
+          severity: "warn",
+        }),
+      ]),
+    );
+  });
+
+  it("escalates unsafe hook external-content bypass when gateway is remotely exposed", async () => {
+    const cfg: OpenClawConfig = {
+      gateway: { bind: "lan" },
+      hooks: {
+        enabled: true,
+        token: "shared-gateway-token-1234567890",
+        defaultSessionKey: "hook:ingress",
+        gmail: { allowUnsafeExternalContent: true },
+      },
+    };
+
+    const res = await runSecurityAudit({
+      config: cfg,
+      includeFilesystem: false,
+      includeChannelSecurity: false,
+    });
+
+    expect(res.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checkId: "hooks.gmail.allow_unsafe_external_content",
+          severity: "critical",
+        }),
+      ]),
+    );
+  });
+
+  it("escalates unsafe hook bypass when tailscale serve exposes gateway", async () => {
+    const cfg: OpenClawConfig = {
+      gateway: {
+        bind: "loopback",
+        tailscale: { mode: "serve" },
+      },
+      hooks: {
+        enabled: true,
+        token: "shared-gateway-token-1234567890",
+        defaultSessionKey: "hook:ingress",
+        gmail: { allowUnsafeExternalContent: true },
+      },
+    };
+
+    const res = await runSecurityAudit({
+      config: cfg,
+      includeFilesystem: false,
+      includeChannelSecurity: false,
+    });
+
+    expect(res.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checkId: "hooks.gmail.allow_unsafe_external_content",
+          severity: "critical",
+        }),
+      ]),
+    );
+  });
+
+  it("escalates unsafe hook mapping bypass when gateway is remotely exposed", async () => {
+    const cfg: OpenClawConfig = {
+      gateway: { bind: "lan" },
+      hooks: {
+        enabled: true,
+        token: "shared-gateway-token-1234567890",
+        defaultSessionKey: "hook:ingress",
+        mappings: [{ id: "unsafe-agent", allowUnsafeExternalContent: true }],
+      },
+    };
+
+    const res = await runSecurityAudit({
+      config: cfg,
+      includeFilesystem: false,
+      includeChannelSecurity: false,
+    });
+
+    expect(res.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checkId: "hooks.mappings.allow_unsafe_external_content",
+          severity: "critical",
+        }),
+      ]),
+    );
+  });
+
+  it("does not flag hook external-content bypass when safety wrapping stays enabled", async () => {
+    const cfg: OpenClawConfig = {
+      hooks: {
+        enabled: true,
+        token: "shared-gateway-token-1234567890",
+        defaultSessionKey: "hook:ingress",
+        gmail: { allowUnsafeExternalContent: false },
+        mappings: [{ id: "safe-agent", allowUnsafeExternalContent: false }],
+      },
+    };
+
+    const res = await runSecurityAudit({
+      config: cfg,
+      includeFilesystem: false,
+      includeChannelSecurity: false,
+    });
+
+    expect(
+      res.findings.some((f) => f.checkId === "hooks.gmail.allow_unsafe_external_content"),
+    ).toBe(false);
+    expect(
+      res.findings.some((f) => f.checkId === "hooks.mappings.allow_unsafe_external_content"),
+    ).toBe(false);
+  });
+
   it("warns when gateway HTTP APIs run with auth.mode=none on loopback", async () => {
     const cfg: OpenClawConfig = {
       gateway: {
@@ -1683,6 +1826,234 @@ describe("security audit", () => {
     });
 
     expect(res.findings.some((entry) => entry.checkId === "gateway.http.no_auth")).toBe(false);
+  });
+
+  it("flags OpenResponses URL fetch when allowlists are missing", async () => {
+    const cfg: OpenClawConfig = {
+      gateway: {
+        http: {
+          endpoints: {
+            responses: {
+              enabled: true,
+              files: { allowUrl: true },
+              images: { allowUrl: true },
+            },
+          },
+        },
+      },
+    };
+
+    const res = await runSecurityAudit({
+      config: cfg,
+      includeFilesystem: false,
+      includeChannelSecurity: false,
+    });
+
+    expect(res.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checkId: "gateway.http.responses.files.url_allowlist_missing",
+          severity: "warn",
+        }),
+        expect.objectContaining({
+          checkId: "gateway.http.responses.images.url_allowlist_missing",
+          severity: "warn",
+        }),
+      ]),
+    );
+  });
+
+  it("keeps OpenResponses URL allowlist severity at warn for bind auto", async () => {
+    const cfg: OpenClawConfig = {
+      gateway: {
+        bind: "auto",
+        http: {
+          endpoints: {
+            responses: {
+              enabled: true,
+              files: { allowUrl: true },
+            },
+          },
+        },
+      },
+    };
+
+    const res = await runSecurityAudit({
+      config: cfg,
+      includeFilesystem: false,
+      includeChannelSecurity: false,
+    });
+
+    expect(res.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checkId: "gateway.http.responses.files.url_allowlist_missing",
+          severity: "warn",
+        }),
+      ]),
+    );
+  });
+
+  it("keeps OpenResponses URL allowlist severity at warn for custom loopback bind", async () => {
+    const cfg: OpenClawConfig = {
+      gateway: {
+        bind: "custom",
+        customBindHost: "127.0.0.1",
+        http: {
+          endpoints: {
+            responses: {
+              enabled: true,
+              files: { allowUrl: true },
+            },
+          },
+        },
+      },
+    };
+
+    const res = await runSecurityAudit({
+      config: cfg,
+      includeFilesystem: false,
+      includeChannelSecurity: false,
+    });
+
+    expect(res.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checkId: "gateway.http.responses.files.url_allowlist_missing",
+          severity: "warn",
+        }),
+      ]),
+    );
+  });
+
+  it("flags OpenResponses URL fetch defaults without allowlists", async () => {
+    const cfg: OpenClawConfig = {
+      gateway: {
+        http: {
+          endpoints: {
+            responses: {
+              enabled: true,
+            },
+          },
+        },
+      },
+    };
+
+    const res = await runSecurityAudit({
+      config: cfg,
+      includeFilesystem: false,
+      includeChannelSecurity: false,
+    });
+
+    expect(res.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checkId: "gateway.http.responses.files.url_allowlist_missing",
+          severity: "warn",
+        }),
+        expect.objectContaining({
+          checkId: "gateway.http.responses.images.url_allowlist_missing",
+          severity: "warn",
+        }),
+      ]),
+    );
+  });
+
+  it("escalates OpenResponses URL allowlist findings when tailscale serve exposes gateway", async () => {
+    const cfg: OpenClawConfig = {
+      gateway: {
+        bind: "loopback",
+        tailscale: { mode: "serve" },
+        http: {
+          endpoints: {
+            responses: {
+              enabled: true,
+              files: { allowUrl: true },
+            },
+          },
+        },
+      },
+    };
+
+    const res = await runSecurityAudit({
+      config: cfg,
+      includeFilesystem: false,
+      includeChannelSecurity: false,
+    });
+
+    expect(res.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checkId: "gateway.http.responses.files.url_allowlist_missing",
+          severity: "critical",
+        }),
+      ]),
+    );
+  });
+
+  it("escalates OpenResponses URL allowlist findings when gateway is remotely exposed", async () => {
+    const cfg: OpenClawConfig = {
+      gateway: {
+        bind: "lan",
+        http: {
+          endpoints: {
+            responses: {
+              enabled: true,
+              files: { allowUrl: true },
+            },
+          },
+        },
+      },
+    };
+
+    const res = await runSecurityAudit({
+      config: cfg,
+      includeFilesystem: false,
+      includeChannelSecurity: false,
+    });
+
+    expect(res.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checkId: "gateway.http.responses.files.url_allowlist_missing",
+          severity: "critical",
+        }),
+      ]),
+    );
+  });
+
+  it("does not flag OpenResponses URL allowlist when URL fetch is hardened", async () => {
+    const cfg: OpenClawConfig = {
+      gateway: {
+        http: {
+          endpoints: {
+            responses: {
+              enabled: true,
+              files: {
+                allowUrl: true,
+                urlAllowlist: ["cdn.example.com"],
+              },
+              images: {
+                allowUrl: false,
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const res = await runSecurityAudit({
+      config: cfg,
+      includeFilesystem: false,
+      includeChannelSecurity: false,
+    });
+
+    expect(
+      res.findings.some((f) => f.checkId === "gateway.http.responses.files.url_allowlist_missing"),
+    ).toBe(false);
+    expect(
+      res.findings.some((f) => f.checkId === "gateway.http.responses.images.url_allowlist_missing"),
+    ).toBe(false);
   });
 
   it("reports HTTP API session-key override surfaces when enabled", async () => {

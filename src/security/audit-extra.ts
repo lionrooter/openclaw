@@ -13,7 +13,9 @@ export {
   collectExposureMatrixFindings,
   collectGatewayHttpNoAuthFindings,
   collectGatewayHttpSessionKeyOverrideFindings,
+  collectGatewayOpenResponsesUrlAllowlistFindings,
   collectHooksHardeningFindings,
+  collectHooksUnsafeExternalContentFindings,
   collectMinimalProfileOverrideFindings,
   collectModelHygieneFindings,
   collectNodeDenyCommandPatternFindings,
@@ -24,7 +26,6 @@ export {
   collectSyncedFolderFindings,
   type SecurityAuditFinding,
 } from "./audit-extra.sync.js";
-
 // Async collectors
 export {
   collectSandboxBrowserHashLabelFindings,

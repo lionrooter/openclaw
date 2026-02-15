@@ -27,6 +27,8 @@ The audit warns when multiple DM senders share the main session and recommends *
 This is for cooperative/shared inbox hardening. A single Gateway shared by mutually untrusted/adversarial operators is not a recommended setup; split trust boundaries with separate gateways (or separate OS users/hosts).
 It also warns when small models (`<=300B`) are used without sandboxing and with web/browser tools enabled.
 For webhook ingress, it warns when `hooks.defaultSessionKey` is unset, when request `sessionKey` overrides are enabled, and when overrides are enabled without `hooks.allowedSessionKeyPrefixes`.
+It also flags unsafe external-content bypass settings for hooks (`hooks.gmail.allowUnsafeExternalContent=true` and `hooks.mappings[].allowUnsafeExternalContent=true`), with higher severity when the gateway is remotely exposed.
+It also flags permissive OpenResponses URL ingestion when `/v1/responses` is enabled with URL fetch allowed but no `urlAllowlist` on `files`/`images`.
 It also warns when sandbox Docker settings are configured while sandbox mode is off, when `gateway.nodes.denyCommands` uses ineffective pattern-like/unknown entries, when global `tools.profile="minimal"` is overridden by agent tool profiles, and when installed extension plugin tools may be reachable under permissive tool policy.
 It also warns when sandbox browser uses Docker `bridge` network without `sandbox.browser.cdpSourceRange`.
 It also warns when existing sandbox browser Docker containers have missing/stale hash labels (for example pre-migration containers missing `openclaw.browserConfigEpoch`) and recommends `openclaw sandbox recreate --browser --all`.
