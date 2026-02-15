@@ -235,21 +235,31 @@ struct OnboardingWizardView: View {
         }
         .onChange(of: self.appModel.gatewayStatusText) { _, newValue in
             let next = GatewayConnectionIssue.detect(from: newValue)
-            // Avoid "flip-flopping" the UI by clearing pairing info when the underlying connection
-            // transitions through intermediate statuses (e.g. Offline after we pause reconnects).
+            // Avoid "flip-flopping" the UI by clearing actionable issues when the underlying connection
+            // transitions through intermediate statuses (e.g. Offline/Connecting while reconnect churns).
             if self.issue.needsPairing, next.needsPairing {
                 // Keep the requestId sticky even if the status line omits it after we pause.
                 let mergedRequestId = next.requestId ?? self.issue.requestId ?? self.pairingRequestId
                 self.issue = .pairingRequired(requestId: mergedRequestId)
             } else if self.issue.needsPairing, !next.needsPairing {
                 // Ignore non-pairing statuses until the user explicitly retries/scans again, or we connect.
+            } else if self.issue.needsAuthToken, !next.needsAuthToken, !next.needsPairing {
+                // Same idea for auth: once we learn credentials are missing/rejected, keep that sticky until
+                // the user retries/scans again or we successfully connect.
             } else {
                 self.issue = next
             }
+
             if let requestId = next.requestId, !requestId.isEmpty {
                 self.pairingRequestId = requestId
             }
-            if next.needsAuthToken || next.needsPairing {
+
+            // If the gateway tells us auth is missing/rejected, stop reconnect churn until the user intervenes.
+            if next.needsAuthToken {
+                self.appModel.gatewayAutoReconnectEnabled = false
+            }
+
+            if self.issue.needsAuthToken || self.issue.needsPairing {
                 self.step = .auth
             }
             if !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -756,6 +766,7 @@ struct OnboardingWizardView: View {
 
     private func connectDiscoveredGateway(_ gateway: GatewayDiscoveryModel.DiscoveredGateway) async {
         self.connectingGatewayID = gateway.id
+        self.issue = .none
         self.connectMessage = "Connecting to \(gateway.name)…"
         self.statusLine = "Connecting to \(gateway.name)…"
         defer { self.connectingGatewayID = nil }
@@ -798,6 +809,7 @@ struct OnboardingWizardView: View {
         let host = self.manualHost.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !host.isEmpty, self.manualPort > 0, self.manualPort <= 65535 else { return }
         self.connectingGatewayID = "manual"
+        self.issue = .none
         self.connectMessage = "Connecting to \(host)…"
         self.statusLine = "Connecting to \(host):\(self.manualPort)…"
         defer { self.connectingGatewayID = nil }
@@ -806,6 +818,7 @@ struct OnboardingWizardView: View {
 
     private func retryLastAttempt() async {
         self.connectingGatewayID = "retry"
+        self.issue = .none
         self.connectMessage = "Retrying…"
         self.statusLine = "Retrying last connection…"
         defer { self.connectingGatewayID = nil }
