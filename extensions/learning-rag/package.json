@@ -1,0 +1,19 @@
+{
+  "name": "@openclaw/learning-rag",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Neo4j knowledge graph RAG plugin — injects vault knowledge + conversation history into agent context",
+  "type": "module",
+  "dependencies": {
+    "neo4j-driver": "^5.27.0",
+    "openai": "^6.21.0"
+  },
+  "devDependencies": {
+    "openclaw": "workspace:*"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
