@@ -42,3 +42,21 @@ Announce to a specific channel:
 ```bash
 openclaw cron edit <job-id> --announce --channel slack --to "channel:C1234567890"
 ```
+
+## Timeout-safe manual runs
+
+For long isolated jobs, `cron.run` can exceed the default CLI timeout (`--timeout 30000`).
+The command now includes built-in safety rails:
+
+- Delivery preflight for isolated `announce` jobs (unless `--no-preflight`).
+- Automatic run-log verification on timeout (unless `--no-verify-on-timeout`).
+
+```bash
+openclaw cron run <job-id> --timeout 30000 --verify-timeout 180000 --verify-poll 3000
+```
+
+Useful flags:
+
+- `--no-preflight`: skip channel preflight checks.
+- `--no-verify-on-timeout`: disable timeout recovery via `cron.runs`.
+- `--preflight-timeout <ms>`: timeout for `channels.status` preflight.

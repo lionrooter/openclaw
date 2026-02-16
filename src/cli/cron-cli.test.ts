@@ -1,12 +1,13 @@
 import { Command } from "commander";
 import { describe, expect, it, vi } from "vitest";
 
-const callGatewayFromCli = vi.fn(async (method: string, _opts: unknown, params?: unknown) => {
+const defaultGatewayRpcMock = async (method: string, _opts: unknown, params?: unknown) => {
   if (method === "cron.status") {
     return { enabled: true };
   }
   return { ok: true, params };
-});
+};
+const callGatewayFromCli = vi.fn(defaultGatewayRpcMock);
 
 vi.mock("./gateway-rpc.js", async () => {
   const actual = await vi.importActual<typeof import("./gateway-rpc.js")>("./gateway-rpc.js");
@@ -401,5 +402,170 @@ describe("cron cli", () => {
     expect(patch?.patch?.payload?.message).toBe("Updated message");
     expect(patch?.patch?.delivery?.mode).toBe("announce");
     expect(patch?.patch?.delivery?.bestEffort).toBe(false);
+  });
+
+  it("runs delivery preflight before cron run", async () => {
+    callGatewayFromCli.mockClear();
+    callGatewayFromCli.mockImplementation(async (method: string) => {
+      if (method === "cron.list") {
+        return {
+          jobs: [
+            {
+              id: "job-1",
+              sessionTarget: "isolated",
+              delivery: { mode: "announce", channel: "zulip" },
+            },
+          ],
+        };
+      }
+      if (method === "channels.status") {
+        return {
+          channelOrder: ["zulip"],
+          channels: {
+            zulip: { configured: true, running: true, connected: true },
+          },
+          channelAccounts: {
+            zulip: [
+              {
+                accountId: "archie",
+                configured: true,
+                running: true,
+                connected: true,
+              },
+            ],
+          },
+          channelDefaultAccountId: { zulip: "archie" },
+        };
+      }
+      if (method === "cron.run") {
+        return { ok: true, ran: true };
+      }
+      return defaultGatewayRpcMock(method, {}, undefined);
+    });
+
+    const program = buildProgram();
+    await program.parseAsync(["cron", "run", "job-1"], { from: "user" });
+
+    const methods = callGatewayFromCli.mock.calls.map((call) => call[0]);
+    expect(methods).toContain("cron.list");
+    expect(methods).toContain("channels.status");
+    expect(methods).toContain("cron.run");
+    expect(methods.indexOf("cron.list")).toBeLessThan(methods.indexOf("cron.run"));
+
+    callGatewayFromCli.mockImplementation(defaultGatewayRpcMock);
+  });
+
+  it("recovers cron run timeout by verifying cron.runs", async () => {
+    callGatewayFromCli.mockClear();
+    let runsCallCount = 0;
+    callGatewayFromCli.mockImplementation(async (method: string) => {
+      if (method === "cron.list") {
+        return { jobs: [] };
+      }
+      if (method === "cron.runs") {
+        runsCallCount += 1;
+        if (runsCallCount === 1) {
+          return { entries: [{ ts: 100, status: "ok" }] };
+        }
+        return {
+          entries: [
+            { ts: 100, status: "ok" },
+            { ts: Date.now() + 1000, status: "ok", summary: "done" },
+          ],
+        };
+      }
+      if (method === "cron.run") {
+        throw new Error("gateway timeout after 30000ms");
+      }
+      return defaultGatewayRpcMock(method, {}, undefined);
+    });
+
+    const program = buildProgram();
+    await program.parseAsync(
+      ["cron", "run", "job-1", "--verify-timeout", "2000", "--verify-poll", "1"],
+      {
+        from: "user",
+      },
+    );
+
+    expect(callGatewayFromCli.mock.calls.some((call) => call[0] === "cron.run")).toBe(true);
+    expect(callGatewayFromCli.mock.calls.filter((call) => call[0] === "cron.runs").length).toBe(2);
+
+    callGatewayFromCli.mockImplementation(defaultGatewayRpcMock);
+  });
+
+  it("exits non-zero when timeout verification finds failed run", async () => {
+    callGatewayFromCli.mockClear();
+    let runsCallCount = 0;
+    callGatewayFromCli.mockImplementation(async (method: string) => {
+      if (method === "cron.list") {
+        return { jobs: [] };
+      }
+      if (method === "cron.runs") {
+        runsCallCount += 1;
+        if (runsCallCount === 1) {
+          return { entries: [{ ts: 100, status: "ok" }] };
+        }
+        return {
+          entries: [
+            { ts: 100, status: "ok" },
+            { ts: Date.now() + 1000, status: "error", error: "delivery failed" },
+          ],
+        };
+      }
+      if (method === "cron.run") {
+        throw new Error("gateway timeout after 30000ms");
+      }
+      return defaultGatewayRpcMock(method, {}, undefined);
+    });
+
+    const program = buildProgram();
+    await expect(
+      program.parseAsync(
+        ["cron", "run", "job-1", "--verify-timeout", "2000", "--verify-poll", "1"],
+        {
+          from: "user",
+        },
+      ),
+    ).rejects.toThrow("__exit__:1");
+
+    callGatewayFromCli.mockImplementation(defaultGatewayRpcMock);
+  });
+
+  it("fails preflight when announce delivery channel is missing", async () => {
+    callGatewayFromCli.mockClear();
+    callGatewayFromCli.mockImplementation(async (method: string) => {
+      if (method === "cron.list") {
+        return {
+          jobs: [
+            {
+              id: "job-1",
+              sessionTarget: "isolated",
+              delivery: { mode: "announce", channel: "zulip" },
+            },
+          ],
+        };
+      }
+      if (method === "channels.status") {
+        return {
+          channelOrder: ["imessage"],
+          channels: { imessage: { configured: true } },
+          channelAccounts: {},
+          channelDefaultAccountId: {},
+        };
+      }
+      if (method === "cron.run") {
+        return { ok: true, ran: true };
+      }
+      return defaultGatewayRpcMock(method, {}, undefined);
+    });
+
+    const program = buildProgram();
+    await expect(program.parseAsync(["cron", "run", "job-1"], { from: "user" })).rejects.toThrow(
+      "__exit__:1",
+    );
+    expect(callGatewayFromCli.mock.calls.some((call) => call[0] === "cron.run")).toBe(false);
+
+    callGatewayFromCli.mockImplementation(defaultGatewayRpcMock);
   });
 });
