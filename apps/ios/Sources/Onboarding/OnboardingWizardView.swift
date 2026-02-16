@@ -112,19 +112,25 @@ struct OnboardingWizardView: View {
                         }
                     }
                 }
-                ToolbarItem(placement: .topBarLeading) {
-                    if self.step.canGoBack {
+
+                // Keep leading toolbar items concrete (instead of emitting an empty ToolbarItem)
+                // to avoid UIKit receiving nil bar button entries during rapid step transitions.
+                if self.step.canGoBack {
+                    ToolbarItem(placement: .topBarLeading) {
                         Button {
                             self.navigateBack()
                         } label: {
                             Label("Back", systemImage: "chevron.left")
                         }
-                    } else if self.allowSkip {
+                    }
+                } else if self.allowSkip {
+                    ToolbarItem(placement: .topBarLeading) {
                         Button("Close") {
                             self.onClose()
                         }
                     }
                 }
+
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button("Done") {
