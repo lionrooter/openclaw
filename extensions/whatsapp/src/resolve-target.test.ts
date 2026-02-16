@@ -26,7 +26,9 @@ vi.mock("openclaw/plugin-sdk", () => ({
       return { ok: false, error: new Error("missing target") };
     }
     const normalizeWhatsAppTarget = (value: string) => {
-      if (value === "invalid-target") return null;
+      if (value === "invalid-target") {
+        return null;
+      }
       const stripped = value.replace(/^whatsapp:/i, "").replace(/^\+/, "");
       return stripped.includes("@g.us") ? stripped : `${stripped}@s.whatsapp.net`;
     };

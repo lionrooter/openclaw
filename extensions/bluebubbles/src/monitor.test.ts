@@ -515,7 +515,8 @@ describe("BlueBubbles webhook monitor", () => {
         (req as unknown as { socket: { remoteAddress: string } }).socket = {
           remoteAddress: "127.0.0.1",
         };
-        req.destroy = vi.fn();
+        const destroySpy = vi.fn();
+        req.destroy = destroySpy;
 
         const res = createMockResponse();
 
@@ -527,7 +528,7 @@ describe("BlueBubbles webhook monitor", () => {
         const handled = await handledPromise;
         expect(handled).toBe(true);
         expect(res.statusCode).toBe(408);
-        expect(req.destroy).toHaveBeenCalled();
+        expect(destroySpy).toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
       }

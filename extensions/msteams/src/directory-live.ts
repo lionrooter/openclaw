@@ -2,8 +2,6 @@ import type { ChannelDirectoryEntry } from "openclaw/plugin-sdk";
 import {
   escapeOData,
   fetchGraphJson,
-  type GraphChannel,
-  type GraphGroup,
   type GraphResponse,
   type GraphUser,
   listChannelsForTeam,

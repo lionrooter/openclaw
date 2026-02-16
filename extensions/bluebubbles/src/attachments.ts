@@ -10,7 +10,6 @@ import {
   blueBubblesFetchWithTimeout,
   buildBlueBubblesApiUrl,
   type BlueBubblesAttachment,
-  type BlueBubblesSendTarget,
 } from "./types.js";
 
 export type BlueBubblesAttachmentOpts = {

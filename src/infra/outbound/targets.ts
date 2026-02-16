@@ -254,21 +254,25 @@ export function resolveHeartbeatDeliveryTarget(params: {
     const channelPlugin = getChannelPlugin(resolvedTarget.channel);
     if (channelPlugin) {
       const accountIds = channelPlugin.config.listAccountIds(cfg);
-      const hasEnabledAccount = accountIds.some((id) => {
-        const account = channelPlugin.config.resolveAccount(cfg, id);
-        return channelPlugin.config.isEnabled
-          ? channelPlugin.config.isEnabled(account, cfg)
-          : (account as { enabled?: boolean })?.enabled !== false;
-      });
-      if (!hasEnabledAccount) {
-        return {
-          channel: "none",
-          reason: "channel-disabled",
-          accountId: undefined,
-          lastChannel: resolvedTarget.lastChannel,
-          lastAccountId: resolvedTarget.lastAccountId,
-        };
+      if (accountIds.length > 0) {
+        const hasEnabledAccount = accountIds.some((id) => {
+          const account = channelPlugin.config.resolveAccount(cfg, id);
+          return channelPlugin.config.isEnabled
+            ? channelPlugin.config.isEnabled(account, cfg)
+            : (account as { enabled?: boolean })?.enabled !== false;
+        });
+        if (!hasEnabledAccount) {
+          return {
+            channel: "none",
+            reason: "channel-disabled",
+            accountId: undefined,
+            lastChannel: resolvedTarget.lastChannel,
+            lastAccountId: resolvedTarget.lastAccountId,
+          };
+        }
       }
+      // No configured accounts: keep historical behavior and allow fallback delivery
+      // (e.g. tests/custom plugins that intentionally use account-less stubs).
     }
   }
 

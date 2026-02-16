@@ -30,6 +30,7 @@ export type ZulipMessage = {
   sender_id: number;
   sender_email: string;
   sender_full_name: string;
+  is_bot?: boolean;
   type: "stream" | "private";
   stream_id?: number;
   display_recipient: string | Array<{ id: number; email: string; full_name: string }>;

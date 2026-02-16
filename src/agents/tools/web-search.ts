@@ -993,7 +993,7 @@ async function runBraveContext(params: {
 
   if (!res.ok) {
     const detail = await readResponseText(res);
-    throw new Error(`Brave Context API error (${res.status}): ${detail || res.statusText}`);
+    throw new Error(`Brave Context API error (${res.status}): ${detail.text || res.statusText}`);
   }
 
   const data = (await res.json()) as BraveContextResponse;
