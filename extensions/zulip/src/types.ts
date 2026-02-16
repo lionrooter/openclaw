@@ -1,0 +1,117 @@
+import type { BlockStreamingCoalesceConfig, DmPolicy, GroupPolicy } from "openclaw/plugin-sdk";
+
+export type ZulipTopicConfig = {
+  /** Number of recent topic messages to include on first turn. Default: 20. */
+  initialHistoryLimit?: number;
+};
+
+export type ZulipXCaseAutoTriageMode = "off" | "command_post_only" | "mentioned" | "always";
+
+export type ZulipXCaseCaseTopicMode = "always" | "on_continue" | "never";
+
+export type ZulipXCaseRouteConfig = {
+  /**
+   * Expert agent id to use for analysis in this route (e.g. "exdi", "artie").
+   * If omitted, the normal routing config for the xcase peer id applies.
+   */
+  expertAgentId?: string;
+  /**
+   * Where to post analysis output by default.
+   * If omitted, falls back to xcase.commandPostStream.
+   */
+  analysisStream?: string;
+  /**
+   * Default analysis/inbox topic for this route (shared, not per-case).
+   * If omitted, falls back to `x/<routeKey>`.
+   */
+  analysisTopic?: string;
+  /** Extra keywords that can be used to select this route (case-insensitive). */
+  aliases?: string[];
+  /**
+   * If set, send analysis messages using this Zulip accountId (so the message comes "from" that bot).
+   * Example: "exdi" to post as the Exdi bot.
+   */
+  postAsAccountId?: string;
+};
+
+export type ZulipXCaseConfig = {
+  /** Enable x.com/twitter.com case triage workflow. */
+  enabled?: boolean;
+  /** Command-post stream where xcase cards and controls are posted. */
+  commandPostStream?: string;
+  /** Base command-post topic (when perCaseTopic is false). */
+  commandPostTopic?: string;
+  /** Split each link into a dedicated analysis topic (legacy; use caseTopicMode). */
+  perCaseTopic?: boolean;
+  /**
+   * Controls when xcase creates a dedicated per-link topic.
+   * - always: create per-case topic immediately (legacy default)
+   * - on_continue: only create per-case topic when `/xcase continue` is used
+   * - never: never create per-case topics
+   */
+  caseTopicMode?: ZulipXCaseCaseTopicMode;
+  /** Auto-triage trigger mode. */
+  autoTriage?: ZulipXCaseAutoTriageMode;
+  /** If false, auto-triage will only capture/create cards, not run analysis. Default: true. */
+  autoAnalyzeOnCapture?: boolean;
+  /** Prefix used when deriving routing peer ids for expert sessions. */
+  routePeerPrefix?: string;
+  /** Optional pinned expert agent id. */
+  expertAgentId?: string;
+  /** Optional expert pool; stable-hash selected by case id. */
+  expertAgentIds?: string[];
+  /**
+   * Optional per-agent/per-domain routes (keyed by a short route key like "exdi", "artie").
+   * Used for expert selection + analysis destination.
+   */
+  routes?: Record<string, ZulipXCaseRouteConfig>;
+  /** Default route key (used when no override is detected). Default: "default". */
+  defaultRoute?: string;
+  /** Maximum links processed from one message. */
+  maxLinksPerMessage?: number;
+  /** Maximum number of open/active cases retained. */
+  maxOpenCases?: number;
+  /** Include source message context in expert-analysis prompts. */
+  includeMessageContext?: boolean;
+};
+
+export type ZulipAccountConfig = {
+  name?: string;
+  capabilities?: string[];
+  configWrites?: boolean;
+  enabled?: boolean;
+  /** Bot email for Zulip Basic auth. */
+  botEmail?: string;
+  /** Bot API key for Zulip Basic auth. */
+  botApiKey?: string;
+  /** Base URL for the Zulip server (e.g., https://chat.example.com). */
+  baseUrl?: string;
+  /** If true, skip TLS certificate verification (for self-signed certs). */
+  tlsRejectUnauthorized?: boolean;
+  /** Require @mention to respond in streams. Default: true. */
+  requireMention?: boolean;
+  /** Direct message policy. */
+  dmPolicy?: DmPolicy;
+  /** Allowlist for direct messages (Zulip emails or user ids). */
+  allowFrom?: Array<string | number>;
+  /** Allowlist for stream messages. */
+  groupAllowFrom?: Array<string | number>;
+  /** Stream/group message policy. */
+  groupPolicy?: GroupPolicy;
+  /** Outbound text chunk size (chars). Default: 10000. */
+  textChunkLimit?: number;
+  /** Chunking mode. */
+  chunkMode?: "length" | "newline";
+  /** Disable block streaming for this account. */
+  blockStreaming?: boolean;
+  /** Merge streamed block replies before sending. */
+  blockStreamingCoalesce?: BlockStreamingCoalesceConfig;
+  /** Topic/thread behavior for stream messages. */
+  topic?: ZulipTopicConfig;
+  /** X/Twitter command-post triage workflow. */
+  xcase?: ZulipXCaseConfig;
+};
+
+export type ZulipConfig = {
+  accounts?: Record<string, ZulipAccountConfig>;
+} & ZulipAccountConfig;
