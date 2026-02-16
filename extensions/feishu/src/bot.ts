@@ -13,7 +13,7 @@ import { resolveFeishuAccount } from "./accounts.js";
 import { createFeishuClient } from "./client.js";
 import { tryRecordMessage } from "./dedup.js";
 import { maybeCreateDynamicAgent } from "./dynamic-agent.js";
-import { downloadImageFeishu, downloadMessageResourceFeishu } from "./media.js";
+import { downloadMessageResourceFeishu } from "./media.js";
 import { extractMentionTargets, extractMessageBody, isMentionForwardRequest } from "./mention.js";
 import {
   resolveFeishuGroupConfig,
@@ -34,12 +34,16 @@ type PermissionError = {
 };
 
 function extractPermissionError(err: unknown): PermissionError | null {
-  if (!err || typeof err !== "object") return null;
+  if (!err || typeof err !== "object") {
+    return null;
+  }
 
   // Axios error structure: err.response.data contains the Feishu error
   const axiosErr = err as { response?: { data?: unknown } };
   const data = axiosErr.response?.data;
-  if (!data || typeof data !== "object") return null;
+  if (!data || typeof data !== "object") {
+    return null;
+  }
 
   const feishuErr = data as {
     code?: number;
@@ -48,7 +52,9 @@ function extractPermissionError(err: unknown): PermissionError | null {
   };
 
   // Feishu permission error code: 99991672
-  if (feishuErr.code !== 99991672) return null;
+  if (feishuErr.code !== 99991672) {
+    return null;
+  }
 
   // Extract the grant URL from the error message (contains the direct link)
   const msg = feishuErr.msg ?? "";
@@ -80,21 +86,27 @@ type SenderNameResult = {
 async function resolveFeishuSenderName(params: {
   account: ResolvedFeishuAccount;
   senderOpenId: string;
-  log: (...args: any[]) => void;
+  log: (...args: unknown[]) => void;
 }): Promise<SenderNameResult> {
   const { account, senderOpenId, log } = params;
-  if (!account.configured) return {};
-  if (!senderOpenId) return {};
+  if (!account.configured) {
+    return {};
+  }
+  if (!senderOpenId) {
+    return {};
+  }
 
   const cached = senderNameCache.get(senderOpenId);
   const now = Date.now();
-  if (cached && cached.expireAt > now) return { name: cached.name };
+  if (cached && cached.expireAt > now) {
+    return { name: cached.name };
+  }
 
   try {
     const client = createFeishuClient(account);
 
     // contact/v3/users/:user_id?user_id_type=open_id
-    const res: any = await client.contact.user.get({
+    const res: unknown = await client.contact.user.get({
       path: { user_id: senderOpenId },
       params: { user_id_type: "open_id" },
     });
@@ -186,8 +198,12 @@ function parseMessageContent(content: string, messageType: string): string {
 
 function checkBotMentioned(event: FeishuMessageEvent, botOpenId?: string): boolean {
   const mentions = event.message.mentions ?? [];
-  if (mentions.length === 0) return false;
-  if (!botOpenId) return false;
+  if (mentions.length === 0) {
+    return false;
+  }
+  if (!botOpenId) {
+    return false;
+  }
   return mentions.some((m) => m.id.open_id === botOpenId);
 }
 
@@ -195,7 +211,9 @@ function stripBotMention(
   text: string,
   mentions?: FeishuMessageEvent["message"]["mentions"],
 ): string {
-  if (!mentions || mentions.length === 0) return text;
+  if (!mentions || mentions.length === 0) {
+    return text;
+  }
   let result = text;
   for (const mention of mentions) {
     result = result.replace(new RegExp(`@${mention.name}\\s*`, "g"), "").trim();
@@ -502,7 +520,9 @@ export async function handleFeishuMessage(params: {
     senderOpenId: ctx.senderOpenId,
     log,
   });
-  if (senderResult.name) ctx = { ...ctx, senderName: senderResult.name };
+  if (senderResult.name) {
+    ctx = { ...ctx, senderName: senderResult.name };
+  }
 
   // Track permission error to inform agent later (with cooldown to avoid repetition)
   let permissionErrorForAgent: PermissionError | undefined;
@@ -697,7 +717,7 @@ export async function handleFeishuMessage(params: {
 
     // Dynamic agent creation for DM users
     // When enabled, creates a unique agent instance with its own workspace for each DM user.
-    let effectiveCfg = cfg;
+    let _effectiveCfg = cfg;
     if (!isGroup && route.matchedBy === "default") {
       const dynamicCfg = feishuCfg?.dynamicAgentCreation as DynamicAgentCreationConfig | undefined;
       if (dynamicCfg?.enabled) {
@@ -710,7 +730,7 @@ export async function handleFeishuMessage(params: {
           log: (msg) => log(msg),
         });
         if (result.created) {
-          effectiveCfg = result.updatedCfg;
+          _effectiveCfg = result.updatedCfg;
           // Re-resolve route with updated config
           route = core.channel.routing.resolveAgentRoute({
             cfg: result.updatedCfg,

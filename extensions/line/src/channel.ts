@@ -416,7 +416,7 @@ export const linePlugin: ChannelPlugin<ResolvedLineAccount> = {
 
         for (const flexMsg of processed.flexMessages) {
           // LINE SDK expects FlexContainer but we receive contents as unknown
-          const flexContents = flexMsg.contents as Parameters<typeof sendFlex>[2];
+          const flexContents = flexMsg.contents;
           lastResult = await sendFlex(to, flexMsg.altText, flexContents, {
             verbose: false,
             accountId: accountId ?? undefined,
@@ -540,7 +540,7 @@ export const linePlugin: ChannelPlugin<ResolvedLineAccount> = {
       // Send flex messages for tables/code blocks
       for (const flexMsg of processed.flexMessages) {
         // LINE SDK expects FlexContainer but we receive contents as unknown
-        const flexContents = flexMsg.contents as Parameters<typeof sendFlex>[2];
+        const flexContents = flexMsg.contents;
         await sendFlex(to, flexMsg.altText, flexContents, {
           verbose: false,
           accountId: accountId ?? undefined,

@@ -150,7 +150,7 @@ const voiceCallPlugin = {
     const validation = validateProviderConfig(config);
 
     if (api.pluginConfig && typeof api.pluginConfig === "object") {
-      const raw = api.pluginConfig as Record<string, unknown>;
+      const raw = api.pluginConfig;
       const twilio = raw.twilio as Record<string, unknown> | undefined;
       if (raw.provider === "log") {
         api.logger.warn('[voice-call] provider "log" is deprecated; use "mock" instead');

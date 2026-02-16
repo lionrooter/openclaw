@@ -77,7 +77,7 @@ function warnDeprecatedUsersEmailEntries(
   }
   const key = deprecated
     .map((v) => v.toLowerCase())
-    .sort()
+    .toSorted()
     .join(",");
   if (warnedDeprecatedUsersEmailAllowFrom.has(key)) {
     return;

@@ -26,7 +26,7 @@ describe("parseFeishuMessageEvent – mentionedBot", () => {
 
   it("returns mentionedBot=false when there are no mentions", () => {
     const event = makeEvent("group", []);
-    const ctx = parseFeishuMessageEvent(event as any, BOT_OPEN_ID);
+    const ctx = parseFeishuMessageEvent(event as never, BOT_OPEN_ID);
     expect(ctx.mentionedBot).toBe(false);
   });
 
@@ -34,7 +34,7 @@ describe("parseFeishuMessageEvent – mentionedBot", () => {
     const event = makeEvent("group", [
       { key: "@_user_1", name: "Bot", id: { open_id: BOT_OPEN_ID } },
     ]);
-    const ctx = parseFeishuMessageEvent(event as any, BOT_OPEN_ID);
+    const ctx = parseFeishuMessageEvent(event as never, BOT_OPEN_ID);
     expect(ctx.mentionedBot).toBe(true);
   });
 
@@ -42,7 +42,7 @@ describe("parseFeishuMessageEvent – mentionedBot", () => {
     const event = makeEvent("group", [
       { key: "@_user_1", name: "Alice", id: { open_id: "ou_alice" } },
     ]);
-    const ctx = parseFeishuMessageEvent(event as any, BOT_OPEN_ID);
+    const ctx = parseFeishuMessageEvent(event as never, BOT_OPEN_ID);
     expect(ctx.mentionedBot).toBe(false);
   });
 
@@ -50,7 +50,7 @@ describe("parseFeishuMessageEvent – mentionedBot", () => {
     const event = makeEvent("group", [
       { key: "@_user_1", name: "Alice", id: { open_id: "ou_alice" } },
     ]);
-    const ctx = parseFeishuMessageEvent(event as any, undefined);
+    const ctx = parseFeishuMessageEvent(event as never, undefined);
     expect(ctx.mentionedBot).toBe(false);
   });
 
@@ -58,7 +58,7 @@ describe("parseFeishuMessageEvent – mentionedBot", () => {
     const event = makeEvent("group", [
       { key: "@_user_1", name: "Alice", id: { open_id: "ou_alice" } },
     ]);
-    const ctx = parseFeishuMessageEvent(event as any, "");
+    const ctx = parseFeishuMessageEvent(event as never, "");
     expect(ctx.mentionedBot).toBe(false);
   });
 });

@@ -19,10 +19,14 @@ function findAccountConfig(
   accounts: Record<string, unknown> | undefined,
   accountId: string,
 ): Record<string, unknown> | undefined {
-  if (!accounts) return undefined;
+  if (!accounts) {
+    return undefined;
+  }
   const normalized = normalizeAccountId(accountId);
   // Direct lookup first
-  if (accounts[normalized]) return accounts[normalized] as Record<string, unknown>;
+  if (accounts[normalized]) {
+    return accounts[normalized] as Record<string, unknown>;
+  }
   // Case-insensitive fallback
   for (const key of Object.keys(accounts)) {
     if (normalizeAccountId(key) === normalized) {
@@ -40,7 +44,7 @@ export function resolveMediaMaxBytes(accountId?: string): number | undefined {
     accountId ?? "",
   );
   if (typeof accountConfig?.mediaMaxMb === "number") {
-    return (accountConfig.mediaMaxMb as number) * 1024 * 1024;
+    return accountConfig.mediaMaxMb * 1024 * 1024;
   }
   // Fall back to top-level config
   if (typeof cfg.channels?.matrix?.mediaMaxMb === "number") {

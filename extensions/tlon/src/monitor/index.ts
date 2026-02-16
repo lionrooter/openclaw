@@ -20,7 +20,9 @@ import {
 } from "./utils.js";
 
 function formatError(err: unknown): string {
-  if (err instanceof Error) return err.message;
+  if (err instanceof Error) {
+    return err.message;
+  }
   return String(err);
 }
 
@@ -478,7 +480,7 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts = {}): Promise<v
         app: "channels",
         path: `/${channelNest}`,
         event: (data: unknown) => {
-          handleIncomingGroupMessage(channelNest)(data as UrbitUpdate);
+          void handleIncomingGroupMessage(channelNest)(data as UrbitUpdate);
         },
         err: (error) => {
           runtime.error?.(`[tlon] Group subscription error for ${channelNest}: ${String(error)}`);
@@ -504,7 +506,7 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts = {}): Promise<v
         app: "chat",
         path: `/dm/${dmShip}`,
         event: (data: unknown) => {
-          handleIncomingDM(data as UrbitUpdate);
+          void handleIncomingDM(data as UrbitUpdate);
         },
         err: (error) => {
           runtime.error?.(`[tlon] DM subscription error for ${dmShip}: ${String(error)}`);
