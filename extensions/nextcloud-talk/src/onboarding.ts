@@ -160,7 +160,7 @@ const dmPolicy: ChannelOnboardingDmPolicy = {
   policyKey: "channels.nextcloud-talk.dmPolicy",
   allowFromKey: "channels.nextcloud-talk.allowFrom",
   getCurrent: (cfg) => cfg.channels?.["nextcloud-talk"]?.dmPolicy ?? "pairing",
-  setPolicy: (cfg, policy) => setNextcloudTalkDmPolicy(cfg as CoreConfig, policy as DmPolicy),
+  setPolicy: (cfg, policy) => setNextcloudTalkDmPolicy(cfg as CoreConfig, policy),
   promptAllowFrom: promptNextcloudTalkAllowFromForAccount as (params: {
     cfg: OpenClawConfig;
     prompter: WizardPrompter;

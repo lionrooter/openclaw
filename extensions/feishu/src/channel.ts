@@ -7,7 +7,6 @@ import {
 } from "openclaw/plugin-sdk";
 import {
   resolveFeishuAccount,
-  resolveFeishuCredentials,
   listFeishuAccountIds,
   resolveDefaultFeishuAccountId,
 } from "./accounts.js";
@@ -133,7 +132,7 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
     resolveAccount: (cfg, accountId) => resolveFeishuAccount({ cfg, accountId }),
     defaultAccountId: (cfg) => resolveDefaultFeishuAccountId(cfg),
     setAccountEnabled: ({ cfg, accountId, enabled }) => {
-      const account = resolveFeishuAccount({ cfg, accountId });
+      const _account = resolveFeishuAccount({ cfg, accountId });
       const isDefault = accountId === DEFAULT_ACCOUNT_ID;
 
       if (isDefault) {
@@ -228,7 +227,9 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
         cfg.channels as Record<string, { groupPolicy?: string }> | undefined
       )?.defaults?.groupPolicy;
       const groupPolicy = feishuCfg?.groupPolicy ?? defaultGroupPolicy ?? "allowlist";
-      if (groupPolicy !== "open") return [];
+      if (groupPolicy !== "open") {
+        return [];
+      }
       return [
         `- Feishu[${account.accountId}] groups: groupPolicy="open" allows any member to trigger (mention-gated). Set channels.feishu.groupPolicy="allowlist" + channels.feishu.groupAllowFrom to restrict senders.`,
       ];

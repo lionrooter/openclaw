@@ -7,7 +7,7 @@ const sendMarkdownCardFeishuMock = vi.hoisted(() => vi.fn());
 const createFeishuClientMock = vi.hoisted(() => vi.fn());
 const resolveReceiveIdTypeMock = vi.hoisted(() => vi.fn());
 const createReplyDispatcherWithTypingMock = vi.hoisted(() => vi.fn());
-const streamingInstances = vi.hoisted(() => [] as any[]);
+const streamingInstances = vi.hoisted(() => [] as unknown[]);
 
 vi.mock("./accounts.js", () => ({ resolveFeishuAccount: resolveFeishuAccountMock }));
 vi.mock("./runtime.js", () => ({ getFeishuRuntime: getFeishuRuntimeMock }));
