@@ -152,7 +152,8 @@ function resolveTaskApiPath(params: Record<string, unknown>) {
   if (byParam) {
     return byParam;
   }
-  const byEnv = typeof process.env.MAESTRO_TASK_API === "string" ? process.env.MAESTRO_TASK_API : "";
+  const byEnv =
+    typeof process.env.MAESTRO_TASK_API === "string" ? process.env.MAESTRO_TASK_API : "";
   if (byEnv.trim()) {
     return byEnv.trim();
   }
