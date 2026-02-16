@@ -160,6 +160,19 @@
         "wake": { "label": "wake", "detailKeys": ["text", "mode"] }
       }
     },
+    "maestro": {
+      "emoji": "🧭",
+      "title": "Maestro",
+      "actions": {
+        "list": { "label": "list", "detailKeys": ["status", "owner"] },
+        "enqueue": { "label": "enqueue", "detailKeys": ["owner", "title", "priority"] },
+        "claim": { "label": "claim", "detailKeys": ["task", "owner", "actor"] },
+        "complete": { "label": "complete", "detailKeys": ["task", "result", "actor"] },
+        "reassign": { "label": "reassign", "detailKeys": ["task", "owner", "actor"] },
+        "validate": { "label": "validate", "detailKeys": ["strict"] },
+        "watch": { "label": "watch", "detailKeys": ["hours", "includeBlocked"] }
+      }
+    },
     "gateway": {
       "emoji": "🔌",
       "title": "Gateway",

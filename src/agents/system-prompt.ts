@@ -268,6 +268,8 @@ export function buildAgentSystemPrompt(params: {
     canvas: "Present/eval/snapshot the Canvas",
     nodes: "List/describe/notify/camera/screen on paired nodes",
     cron: "Manage cron jobs and wake events (use for reminders; when scheduling a reminder, write the systemEvent text as something that will read like a reminder when it fires, and mention that it is a reminder depending on the time gap between setting and firing; include recent context in reminder text if appropriate)",
+    maestro:
+      "Manage the Maestro queue in lionroot-openclaw (list/enqueue/claim/complete/reassign/validate/watch)",
     message: "Send messages and channel actions",
     gateway: "Restart, apply config, or run updates on the running OpenClaw process",
     agents_list: "List agent ids allowed for sessions_spawn",
@@ -298,6 +300,7 @@ export function buildAgentSystemPrompt(params: {
     "canvas",
     "nodes",
     "cron",
+    "maestro",
     "message",
     "gateway",
     "agents_list",

@@ -9,6 +9,7 @@ const MUTATING_TOOL_NAMES = new Set([
   "sessions_send",
   "cron",
   "gateway",
+  "maestro",
   "canvas",
   "nodes",
   "session_status",
@@ -119,7 +120,12 @@ export function isMutatingToolCall(toolName: string, args: unknown): boolean {
     case "session_status":
       return typeof record?.model === "string" && record.model.trim().length > 0;
     default: {
-      if (normalized === "cron" || normalized === "gateway" || normalized === "canvas") {
+      if (
+        normalized === "cron" ||
+        normalized === "gateway" ||
+        normalized === "canvas" ||
+        normalized === "maestro"
+      ) {
         return action == null || !READ_ONLY_ACTIONS.has(action);
       }
       if (normalized === "nodes") {
