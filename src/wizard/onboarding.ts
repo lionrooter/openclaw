@@ -313,9 +313,8 @@ export async function runOnboardingWizard(
 
   if (mode === "remote") {
     const { promptRemoteGatewayConfig } = await import("../commands/onboard-remote.js");
-    const { applyRecommendedWorkflowLaneConfig } = await import(
-      "../agents/workflow-lane-presets.js"
-    );
+    const { applyRecommendedWorkflowLaneConfig } =
+      await import("../agents/workflow-lane-presets.js");
     const { logConfigUpdated } = await import("../config/logging.js");
     let nextConfig = applyRecommendedWorkflowLaneConfig(
       await promptRemoteGatewayConfig(baseConfig, prompter),

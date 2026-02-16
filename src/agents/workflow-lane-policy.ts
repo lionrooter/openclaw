@@ -214,7 +214,9 @@ function isGatewayHighImpact(params: Record<string, unknown>): boolean {
 
 function isMutatingMaestroAction(params: Record<string, unknown>): boolean {
   const action = readAction(params);
-  return action === "enqueue" || action === "claim" || action === "complete" || action === "reassign";
+  return (
+    action === "enqueue" || action === "claim" || action === "complete" || action === "reassign"
+  );
 }
 
 function isHighImpactDomainAction(toolName: string, params: Record<string, unknown>): boolean {
