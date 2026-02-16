@@ -108,6 +108,14 @@ export type ZulipAccountConfig = {
   blockStreamingCoalesce?: BlockStreamingCoalesceConfig;
   /** Topic/thread behavior for stream messages. */
   topic?: ZulipTopicConfig;
+  /** Per-stream overrides keyed by stream name. */
+  streams?: Record<
+    string,
+    {
+      /** Require mention for this stream (overrides account-level requireMention). */
+      requireMention?: boolean;
+    }
+  >;
   /** X/Twitter command-post triage workflow. */
   xcase?: ZulipXCaseConfig;
 };

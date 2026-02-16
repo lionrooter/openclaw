@@ -3,6 +3,10 @@ import { searchGraphUsers } from "./graph-users.js";
 import {
   type GraphChannel,
   type GraphGroup,
+  escapeOData,
+  fetchGraphJson,
+  type GraphResponse,
+  type GraphUser,
   listChannelsForTeam,
   listTeamsByName,
   normalizeQuery,
