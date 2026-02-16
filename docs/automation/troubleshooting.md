@@ -71,6 +71,15 @@ Common signatures:
 - Delivery target missing/invalid (`channel`/`to`) → run may succeed internally but skip outbound.
 - Channel auth errors (`unauthorized`, `missing_scope`, `Forbidden`) → delivery blocked by channel credentials/permissions.
 
+Manual trigger tip for isolated announce jobs:
+
+```bash
+openclaw cron run <jobId> --timeout 30000 --verify-timeout 180000
+```
+
+- `cron run` now preflights delivery channels by default.
+- If the RPC call times out, it verifies completion via `cron.runs` before failing.
+
 ## Heartbeat suppressed or skipped
 
 ```bash
