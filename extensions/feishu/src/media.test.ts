@@ -1,3 +1,4 @@
+import type { OpenClawConfig } from "openclaw/plugin-sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const createFeishuClientMock = vi.hoisted(() => vi.fn());
@@ -32,6 +33,8 @@ vi.mock("./runtime.js", () => ({
 }));
 
 import { sendMediaFeishu } from "./media.js";
+
+const TEST_CFG = {} as OpenClawConfig;
 
 describe("sendMediaFeishu msg_type routing", () => {
   beforeEach(() => {
@@ -86,7 +89,7 @@ describe("sendMediaFeishu msg_type routing", () => {
 
   it("uses msg_type=media for mp4", async () => {
     await sendMediaFeishu({
-      cfg: {} as any,
+      cfg: TEST_CFG,
       to: "user:ou_target",
       mediaBuffer: Buffer.from("video"),
       fileName: "clip.mp4",
@@ -107,7 +110,7 @@ describe("sendMediaFeishu msg_type routing", () => {
 
   it("uses msg_type=media for opus", async () => {
     await sendMediaFeishu({
-      cfg: {} as any,
+      cfg: TEST_CFG,
       to: "user:ou_target",
       mediaBuffer: Buffer.from("audio"),
       fileName: "voice.opus",
@@ -128,7 +131,7 @@ describe("sendMediaFeishu msg_type routing", () => {
 
   it("uses msg_type=file for documents", async () => {
     await sendMediaFeishu({
-      cfg: {} as any,
+      cfg: TEST_CFG,
       to: "user:ou_target",
       mediaBuffer: Buffer.from("doc"),
       fileName: "paper.pdf",
@@ -149,7 +152,7 @@ describe("sendMediaFeishu msg_type routing", () => {
 
   it("uses msg_type=media when replying with mp4", async () => {
     await sendMediaFeishu({
-      cfg: {} as any,
+      cfg: TEST_CFG,
       to: "user:ou_target",
       mediaBuffer: Buffer.from("video"),
       fileName: "reply.mp4",
@@ -173,7 +176,7 @@ describe("sendMediaFeishu msg_type routing", () => {
 
     await expect(
       sendMediaFeishu({
-        cfg: {} as any,
+        cfg: TEST_CFG,
         to: "user:ou_target",
         mediaUrl: "https://x/img",
         fileName: "voice.opus",

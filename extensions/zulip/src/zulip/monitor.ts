@@ -727,7 +727,7 @@ function buildAnalysisTopic(caseId: string, url: string): string {
 }
 
 function resolveXCaseTopicMode(xcase: ZulipXCaseConfig): "always" | "on_continue" | "never" {
-  const explicit = (xcase as any)?.caseTopicMode as string | undefined;
+  const explicit = xcase.caseTopicMode;
   if (explicit === "always" || explicit === "on_continue" || explicit === "never") {
     return explicit;
   }
@@ -877,49 +877,76 @@ function formatXCaseRecord(record: XCaseRecord): string {
   ].join("\n");
 }
 
+type UnknownRecord = Record<string, unknown>;
+
+function asUnknownRecord(value: unknown): UnknownRecord | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as UnknownRecord;
+}
+
+function readUnknownString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function readUnknownNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function readXCaseStatus(value: unknown): XCaseStatus {
+  return value === "open" || value === "in_progress" || value === "noaction" || value === "moved"
+    ? value
+    : "error";
+}
+
 function loadXCaseStore(storeFilePath: string): Map<string, XCaseRecord> {
   try {
     if (!fs.existsSync(storeFilePath)) {
       return new Map();
     }
-    const parsed = JSON.parse(fs.readFileSync(storeFilePath, "utf-8")) as
-      | XCaseStore
-      | { version: 1; cases: any[] };
-    if (!parsed || !Array.isArray((parsed as any).cases)) {
+    const parsed = asUnknownRecord(JSON.parse(fs.readFileSync(storeFilePath, "utf-8")));
+    if (!parsed || !Array.isArray(parsed.cases)) {
       return new Map();
     }
+    const parsedCases = parsed.cases
+      .map((entry) => asUnknownRecord(entry))
+      .filter((entry): entry is UnknownRecord => Boolean(entry));
+    const version = readUnknownNumber(parsed.version, 0);
 
     // v1 -> v2 migration (best-effort)
-    if ((parsed as any).version === 1) {
-      const migrated: XCaseRecord[] = (parsed as any).cases
-        .map((r: any) => {
-          const intakeStream = String(r.commandPostStream ?? "").trim();
-          const intakeTopic = String(r.inboxTopic ?? "").trim();
+    if (version === 1) {
+      const migrated: XCaseRecord[] = parsedCases
+        .map((r) => {
+          const intakeStream = readUnknownString(r.commandPostStream).trim();
+          const intakeTopic = readUnknownString(r.inboxTopic).trim();
           const analysisStream = intakeStream;
-          const analysisTopic = String(r.analysisTopic ?? intakeTopic).trim();
+          const analysisTopic = readUnknownString(r.analysisTopic, intakeTopic).trim();
           const dedicatedTopic = analysisTopic !== intakeTopic;
-          if (!r?.id || !r?.url || !intakeStream || !intakeTopic || !analysisTopic) {
+          const id = readUnknownString(r.id).trim();
+          const url = readUnknownString(r.url).trim();
+          if (!id || !url || !intakeStream || !intakeTopic || !analysisTopic) {
             return null;
           }
           const record: XCaseRecord = {
-            id: String(r.id),
-            url: String(r.url),
-            status: (r.status as XCaseStatus) ?? "open",
-            createdAt: Number(r.createdAt ?? Date.now()),
-            updatedAt: Number(r.updatedAt ?? Date.now()),
-            originMessageId: String(r.originMessageId ?? ""),
-            originStream: String(r.originStream ?? ""),
-            originTopic: String(r.originTopic ?? ""),
-            originSenderId: Number(r.originSenderId ?? 0),
-            originSenderEmail: String(r.originSenderEmail ?? ""),
+            id,
+            url,
+            status: readXCaseStatus(r.status),
+            createdAt: readUnknownNumber(r.createdAt, Date.now()),
+            updatedAt: readUnknownNumber(r.updatedAt, Date.now()),
+            originMessageId: readUnknownString(r.originMessageId),
+            originStream: readUnknownString(r.originStream),
+            originTopic: readUnknownString(r.originTopic),
+            originSenderId: readUnknownNumber(r.originSenderId, 0),
+            originSenderEmail: readUnknownString(r.originSenderEmail),
             intakeStream,
             intakeTopic,
             analysisStream,
             analysisTopic,
             dedicatedTopic,
-            routePeerId: String(r.routePeerId ?? ""),
-            expertAgentId: r.expertAgentId ? String(r.expertAgentId) : undefined,
-            lastError: r.lastError ? String(r.lastError) : undefined,
+            routePeerId: readUnknownString(r.routePeerId),
+            expertAgentId: readUnknownString(r.expertAgentId).trim() || undefined,
+            lastError: readUnknownString(r.lastError).trim() || undefined,
           };
           return record;
         })
@@ -927,10 +954,11 @@ function loadXCaseStore(storeFilePath: string): Map<string, XCaseRecord> {
       return new Map(migrated.map((record) => [record.id, record]));
     }
 
-    if ((parsed as any).version !== 2) {
+    if (version !== 2) {
       return new Map();
     }
-    return new Map(((parsed as any).cases as XCaseRecord[]).map((record) => [record.id, record]));
+    const cases = parsedCases as XCaseRecord[];
+    return new Map(cases.map((record) => [record.id, record]));
   } catch {
     return new Map();
   }
@@ -1339,7 +1367,7 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
     const isBotSender =
       msg.sender_email?.endsWith("-bot@macpro.tail63777e.ts.net") ||
       msg.sender_email?.endsWith("-bot-bot@macpro.tail63777e.ts.net") ||
-      (msg as any).is_bot;
+      msg.is_bot === true;
     const wasMentionedByBot =
       isBotSender &&
       (msg.flags?.includes("mentioned") ||
@@ -1493,13 +1521,9 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
     });
 
     // Check stream-level requireMention override (like Discord's per-channel config)
-    const streamConfig =
-      kind !== "dm" && sName ? (account.config as any)?.streams?.[sName] : undefined;
+    const streamConfig = kind !== "dm" && sName ? account.config.streams?.[sName] : undefined;
     const shouldRequireMention =
-      kind !== "dm" &&
-      (streamConfig?.requireMention !== undefined
-        ? streamConfig.requireMention !== false
-        : account.requireMention !== false);
+      kind !== "dm" && (streamConfig?.requireMention ?? account.requireMention ?? true);
 
     // Record pending history for non-triggered messages
     const recordPendingHistory = () => {
@@ -1829,7 +1853,7 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
         });
 
         if (removeAckAfterReply && ackReactionPromise) {
-          ackReactionPromise.then((didAck) => {
+          void ackReactionPromise.then((didAck) => {
             if (!didAck) {
               return;
             }
@@ -1963,7 +1987,7 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
       }
 
       if (removeAckAfterReply && ackReactionPromise) {
-        ackReactionPromise.then((didAck) => {
+        void ackReactionPromise.then((didAck) => {
           if (!didAck) {
             return;
           }
@@ -2177,7 +2201,7 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
 
     // Remove ack reaction after reply is sent
     if (removeAckAfterReply && ackReactionPromise) {
-      ackReactionPromise.then((didAck) => {
+      void ackReactionPromise.then((didAck) => {
         if (!didAck) {
           return;
         }

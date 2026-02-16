@@ -1,3 +1,4 @@
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const createFeishuClientMock = vi.hoisted(() => vi.fn());
@@ -89,7 +90,7 @@ describe("feishu_doc image fetch hardening", () => {
     );
 
     const registerTool = vi.fn();
-    registerFeishuDocTools({
+    const api = {
       config: {
         channels: {
           feishu: {
@@ -97,10 +98,11 @@ describe("feishu_doc image fetch hardening", () => {
             appSecret: "app_secret",
           },
         },
-      } as any,
-      logger: { debug: vi.fn(), info: vi.fn() } as any,
+      },
+      logger: { debug: vi.fn(), info: vi.fn() },
       registerTool,
-    } as any);
+    } as unknown as OpenClawPluginApi;
+    registerFeishuDocTools(api);
 
     const feishuDocTool = registerTool.mock.calls
       .map((call) => call[0])

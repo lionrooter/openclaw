@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { OpenClawConfig } from "../../config/config.js";
 import { withEnv } from "../../test-utils/env.js";
 import { __testing } from "./web-search.js";
 
@@ -231,14 +232,20 @@ describe("web_search_context resolveContextConfig", () => {
   });
 
   it("returns undefined when tools.web.search is missing", () => {
-    expect(resolveContextConfig({ tools: {} } as any)).toBeUndefined();
-    expect(resolveContextConfig({ tools: { web: {} } } as any)).toBeUndefined();
-    expect(resolveContextConfig({ tools: { web: { search: {} } } } as any)).toBeUndefined();
+    expect(resolveContextConfig({ tools: {} } as unknown as OpenClawConfig)).toBeUndefined();
+    expect(
+      resolveContextConfig({ tools: { web: {} } } as unknown as OpenClawConfig),
+    ).toBeUndefined();
+    expect(
+      resolveContextConfig({ tools: { web: { search: {} } } } as unknown as OpenClawConfig),
+    ).toBeUndefined();
   });
 
   it("returns undefined for non-object context", () => {
     expect(
-      resolveContextConfig({ tools: { web: { search: { context: "invalid" } } } } as any),
+      resolveContextConfig({
+        tools: { web: { search: { context: "invalid" } } },
+      } as unknown as OpenClawConfig),
     ).toBeUndefined();
   });
 
@@ -257,7 +264,7 @@ describe("web_search_context resolveContextConfig", () => {
           },
         },
       },
-    } as any;
+    } as unknown as OpenClawConfig;
     const result = resolveContextConfig(cfg);
     expect(result).toBeDefined();
     expect(result!.enabled).toBe(true);
@@ -270,7 +277,7 @@ describe("web_search_context resolveContextConfig", () => {
   it("returns partial config when some fields omitted", () => {
     const cfg = {
       tools: { web: { search: { context: { enabled: false } } } },
-    } as any;
+    } as unknown as OpenClawConfig;
     const result = resolveContextConfig(cfg);
     expect(result).toBeDefined();
     expect(result!.enabled).toBe(false);

@@ -110,7 +110,7 @@ type MonitorAccountParams = {
  * Monitor a single Feishu account.
  */
 async function monitorSingleAccount(params: MonitorAccountParams): Promise<void> {
-  const { cfg, account, runtime, abortSignal } = params;
+  const { cfg, account, runtime } = params;
   const { accountId } = account;
   const log = runtime?.log ?? console.log;
 
@@ -151,7 +151,6 @@ async function monitorWebSocket({
 }: ConnectionParams): Promise<void> {
   const { account, runtime, abortSignal } = params;
   const log = runtime?.log ?? console.log;
-  const error = runtime?.error ?? console.error;
 
   log(`feishu[${accountId}]: starting WebSocket connection...`);
 
@@ -179,7 +178,11 @@ async function monitorWebSocket({
     abortSignal?.addEventListener("abort", handleAbort, { once: true });
 
     try {
-      wsClient.start({ eventDispatcher });
+      void wsClient.start({ eventDispatcher }).catch((err) => {
+        cleanup();
+        abortSignal?.removeEventListener("abort", handleAbort);
+        reject(err);
+      });
       log(`feishu[${accountId}]: WebSocket client started`);
     } catch (err) {
       cleanup();

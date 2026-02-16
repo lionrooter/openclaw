@@ -356,6 +356,17 @@ const ToolFsSchema = z
   .strict()
   .optional();
 
+const ToolCodexDelegateSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    command: z.string().optional(),
+    model: z.string().optional(),
+    maxTimeoutMs: z.number().int().positive().optional(),
+    allowDirs: z.array(z.string()).optional(),
+  })
+  .strict()
+  .optional();
+
 export const AgentSandboxSchema = z
   .object({
     mode: z.union([z.literal("off"), z.literal("non-main"), z.literal("all")]).optional(),
@@ -666,6 +677,7 @@ export const ToolsSchema = z
       .optional(),
     exec: ToolExecSchema,
     fs: ToolFsSchema,
+    codexDelegate: ToolCodexDelegateSchema,
     subagents: z
       .object({
         tools: ToolPolicySchema,

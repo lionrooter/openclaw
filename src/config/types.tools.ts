@@ -215,6 +215,19 @@ export type FsToolsConfig = {
   workspaceOnly?: boolean;
 };
 
+export type CodexDelegateConfig = {
+  /** Enable codex_delegate tool wiring (default: false unless explicitly enabled by caller). */
+  enabled?: boolean;
+  /** Codex CLI binary/command override (default: "codex"). */
+  command?: string;
+  /** Default model passed to codex (default: gpt-5.3-codex). */
+  model?: string;
+  /** Maximum allowed delegate runtime in milliseconds. */
+  maxTimeoutMs?: number;
+  /** Restrict delegated runs to these absolute directory roots. */
+  allowDirs?: string[];
+};
+
 export type AgentToolsConfig = {
   /** Base tool profile applied before allow/deny lists. */
   profile?: ToolProfileId;
@@ -498,6 +511,8 @@ export type ToolsConfig = {
   exec?: ExecToolConfig;
   /** Filesystem tool path guards. */
   fs?: FsToolsConfig;
+  /** Codex delegate tool defaults. */
+  codexDelegate?: CodexDelegateConfig;
   /** Sub-agent tool policy defaults (deny wins). */
   subagents?: {
     /** Default model selection for spawned sub-agents (string or {primary,fallbacks}). */
