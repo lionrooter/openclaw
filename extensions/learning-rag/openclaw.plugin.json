@@ -1,0 +1,82 @@
+{
+  "id": "learning-rag",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "neo4j": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "uri": {
+            "type": "string",
+            "default": "bolt://localhost:7687"
+          },
+          "user": {
+            "type": "string",
+            "default": "neo4j"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": ["password"]
+      },
+      "embedding": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "apiKey": {
+            "type": "string"
+          }
+        },
+        "required": ["apiKey"]
+      },
+      "topK": {
+        "type": "number",
+        "default": 3
+      },
+      "minScore": {
+        "type": "number",
+        "default": 0.3
+      },
+      "includeNeighbors": {
+        "type": "boolean",
+        "default": true
+      }
+    },
+    "required": ["neo4j", "embedding"]
+  },
+  "uiHints": {
+    "neo4j.uri": {
+      "label": "Neo4j URI",
+      "placeholder": "bolt://localhost:7687"
+    },
+    "neo4j.user": {
+      "label": "Neo4j User",
+      "placeholder": "neo4j"
+    },
+    "neo4j.password": {
+      "label": "Neo4j Password",
+      "sensitive": true
+    },
+    "embedding.apiKey": {
+      "label": "OpenAI API Key",
+      "sensitive": true,
+      "placeholder": "sk-proj-...",
+      "help": "API key for query embeddings (or use ${OPENAI_API_KEY})"
+    },
+    "topK": {
+      "label": "Results per search",
+      "help": "Number of similar notes to retrieve"
+    },
+    "minScore": {
+      "label": "Minimum similarity",
+      "help": "Cosine similarity threshold (0-1)"
+    },
+    "includeNeighbors": {
+      "label": "Include graph neighbors",
+      "help": "Also retrieve notes linked to/from top results"
+    }
+  }
+}
