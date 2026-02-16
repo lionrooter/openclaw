@@ -112,10 +112,19 @@ async function resolveFeishuSenderName(params: {
     const client = createFeishuClient(account);
 
     // contact/v3/users/:user_id?user_id_type=open_id
-    const res: unknown = await client.contact.user.get({
+    const res = (await client.contact.user.get({
       path: { user_id: senderOpenId },
       params: { user_id_type: "open_id" },
-    });
+    })) as {
+      data?: {
+        user?: {
+          name?: string;
+          display_name?: string;
+          nickname?: string;
+          en_name?: string;
+        };
+      };
+    };
 
     const name: string | undefined =
       res?.data?.user?.name ||
