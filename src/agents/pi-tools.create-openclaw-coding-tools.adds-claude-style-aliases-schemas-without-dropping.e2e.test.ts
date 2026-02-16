@@ -282,6 +282,7 @@ describe("createOpenClawCodingTools", () => {
       "canvas",
       "nodes",
       "cron",
+      "maestro",
       "message",
       "gateway",
       "agents_list",

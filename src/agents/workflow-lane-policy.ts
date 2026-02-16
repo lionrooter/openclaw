@@ -212,12 +212,20 @@ function isGatewayHighImpact(params: Record<string, unknown>): boolean {
   );
 }
 
+function isMutatingMaestroAction(params: Record<string, unknown>): boolean {
+  const action = readAction(params);
+  return action === "enqueue" || action === "claim" || action === "complete" || action === "reassign";
+}
+
 function isHighImpactDomainAction(toolName: string, params: Record<string, unknown>): boolean {
   if (toolName === "sessions_send") {
     return true;
   }
   if (toolName === "gateway") {
     return isGatewayHighImpact(params);
+  }
+  if (toolName === "maestro") {
+    return isMutatingMaestroAction(params);
   }
   if (toolName === "exec") {
     return isMutatingExecCommand(readExecCommand(params));

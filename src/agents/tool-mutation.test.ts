@@ -63,8 +63,14 @@ describe("tool mutation helpers", () => {
 
   it("keeps legacy name-only mutating heuristics for payload fallback", () => {
     expect(isLikelyMutatingToolName("sessions_send")).toBe(true);
+    expect(isLikelyMutatingToolName("maestro")).toBe(true);
     expect(isLikelyMutatingToolName("browser_actions")).toBe(true);
     expect(isLikelyMutatingToolName("message_slack")).toBe(true);
     expect(isLikelyMutatingToolName("browser")).toBe(false);
+  });
+
+  it("treats maestro list as read-only and claim as mutating", () => {
+    expect(isMutatingToolCall("maestro", { action: "list" })).toBe(false);
+    expect(isMutatingToolCall("maestro", { action: "claim", task: "x.md" })).toBe(true);
   });
 });

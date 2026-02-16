@@ -49,6 +49,7 @@ const SUBAGENT_TOOL_DENY_ALWAYS = [
   // Status/scheduling - main agent coordinates
   "session_status",
   "cron",
+  "maestro",
   // Memory - pass relevant info in spawn prompt instead
   "memory_search",
   "memory_get",
