@@ -9,7 +9,6 @@ import {
 } from "openclaw/plugin-sdk";
 import {
   resolveFeishuAccount,
-  resolveFeishuCredentials,
   listFeishuAccountIds,
   resolveDefaultFeishuAccountId,
 } from "./accounts.js";
@@ -135,7 +134,7 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
     resolveAccount: (cfg, accountId) => resolveFeishuAccount({ cfg, accountId }),
     defaultAccountId: (cfg) => resolveDefaultFeishuAccountId(cfg),
     setAccountEnabled: ({ cfg, accountId, enabled }) => {
-      const account = resolveFeishuAccount({ cfg, accountId });
+      const _account = resolveFeishuAccount({ cfg, accountId });
       const isDefault = accountId === DEFAULT_ACCOUNT_ID;
 
       if (isDefault) {

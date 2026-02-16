@@ -4,7 +4,9 @@ import { installCommonResolveTargetErrorCases } from "../../shared/resolve-targe
 vi.mock("openclaw/plugin-sdk", () => ({
   getChatChannelMeta: () => ({ id: "whatsapp", label: "WhatsApp" }),
   normalizeWhatsAppTarget: (value: string) => {
-    if (value === "invalid-target") return null;
+    if (value === "invalid-target") {
+      return null;
+    }
     // Simulate E.164 normalization: strip leading + and whatsapp: prefix
     const stripped = value.replace(/^whatsapp:/i, "").replace(/^\+/, "");
     return stripped.includes("@g.us") ? stripped : `${stripped}@s.whatsapp.net`;

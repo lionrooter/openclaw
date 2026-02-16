@@ -61,13 +61,17 @@ export default function register(api: OpenClawPluginApi) {
   // doesn't own the thread.
   // ---------------------------------------------------------------------------
   api.on("message_received", async (event, ctx) => {
-    if (ctx.channelId !== "slack") return;
+    if (ctx.channelId !== "slack") {
+      return;
+    }
 
     const text = event.content ?? "";
     const threadTs = (event.metadata?.threadTs as string) ?? "";
     const channelId = (event.metadata?.channelId as string) ?? ctx.conversationId ?? "";
 
-    if (!threadTs || !channelId) return;
+    if (!threadTs || !channelId) {
+      return;
+    }
 
     // Check if this agent was @-mentioned.
     const mentioned =
@@ -85,20 +89,28 @@ export default function register(api: OpenClawPluginApi) {
   // Returns { cancel: true } if another agent owns the thread.
   // ---------------------------------------------------------------------------
   api.on("message_sending", async (event, ctx) => {
-    if (ctx.channelId !== "slack") return;
+    if (ctx.channelId !== "slack") {
+      return;
+    }
 
     const threadTs = (event.metadata?.threadTs as string) ?? "";
     const channelId = (event.metadata?.channelId as string) ?? event.to;
 
     // Top-level messages (no thread) are always allowed.
-    if (!threadTs) return;
+    if (!threadTs) {
+      return;
+    }
 
     // Only enforce in A/B test channels (if set is empty, skip entirely).
-    if (abTestChannels.size > 0 && !abTestChannels.has(channelId)) return;
+    if (abTestChannels.size > 0 && !abTestChannels.has(channelId)) {
+      return;
+    }
 
     // If this agent was @-mentioned in this thread recently, skip ownership check.
     cleanExpiredMentions();
-    if (mentionedThreads.has(`${channelId}:${threadTs}`)) return;
+    if (mentionedThreads.has(`${channelId}:${threadTs}`)) {
+      return;
+    }
 
     // Try to claim ownership via the forwarder HTTP API.
     try {

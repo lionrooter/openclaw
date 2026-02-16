@@ -1,3 +1,4 @@
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import register from "./index.js";
 
@@ -22,7 +23,9 @@ describe("thread-ownership plugin", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    for (const key of Object.keys(hooks)) delete hooks[key];
+    for (const key of Object.keys(hooks)) {
+      delete hooks[key];
+    }
 
     process.env.SLACK_FORWARDER_URL = "http://localhost:8750";
     process.env.SLACK_BOT_USER_ID = "U999";
@@ -39,7 +42,7 @@ describe("thread-ownership plugin", () => {
   });
 
   it("registers message_received and message_sending hooks", () => {
-    register(api as any);
+    register(api as OpenClawPluginApi);
 
     expect(api.on).toHaveBeenCalledTimes(2);
     expect(api.on).toHaveBeenCalledWith("message_received", expect.any(Function));
@@ -48,7 +51,7 @@ describe("thread-ownership plugin", () => {
 
   describe("message_sending", () => {
     beforeEach(() => {
-      register(api as any);
+      register(api as OpenClawPluginApi);
     });
 
     it("allows non-slack channels", async () => {
@@ -122,7 +125,7 @@ describe("thread-ownership plugin", () => {
 
   describe("message_received @-mention tracking", () => {
     beforeEach(() => {
-      register(api as any);
+      register(api as OpenClawPluginApi);
     });
 
     it("tracks @-mentions and skips ownership check for mentioned threads", async () => {
