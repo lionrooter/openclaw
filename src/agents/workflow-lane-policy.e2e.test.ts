@@ -147,6 +147,39 @@ describe("workflow lane guard", () => {
     expect(result.blocked).toBe(false);
   });
 
+  it("treats mutating maestro actions as high-impact", () => {
+    const cfg = {
+      agents: {
+        defaults: {
+          workflowLane: {
+            domain: "strategy",
+            applyWhen: "always",
+            mode: "hard",
+          },
+        },
+        list: [{ id: "leo" }],
+      },
+    } satisfies OpenClawConfig;
+    const ctx = { agentId: "leo", sessionKey: "agent:leo:maestro-claim" };
+
+    const blocked = evaluateWorkflowLaneGuard({
+      toolName: "maestro",
+      params: { action: "claim", task: "inbox/task.md", owner: "leo" },
+      ctx,
+      config: cfg,
+    });
+    expect(blocked.blocked).toBe(true);
+    expect(blocked.reason).toContain("missing ANCHOR");
+
+    const nonMutating = evaluateWorkflowLaneGuard({
+      toolName: "maestro",
+      params: { action: "list" },
+      ctx,
+      config: cfg,
+    });
+    expect(nonMutating.blocked).toBe(false);
+  });
+
   it("treats review as verify for non-mutating domain runs", () => {
     const cfg = {
       agents: {
