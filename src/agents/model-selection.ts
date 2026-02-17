@@ -41,6 +41,9 @@ export function normalizeProviderId(provider: string): string {
   if (normalized === "z.ai" || normalized === "z-ai") {
     return "zai";
   }
+  if (normalized === "gemini") {
+    return "google";
+  }
   if (normalized === "opencode-zen") {
     return "opencode";
   }
