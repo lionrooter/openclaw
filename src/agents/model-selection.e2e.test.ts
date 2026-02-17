@@ -13,6 +13,7 @@ describe("model-selection", () => {
   describe("normalizeProviderId", () => {
     it("should normalize provider names", () => {
       expect(normalizeProviderId("Anthropic")).toBe("anthropic");
+      expect(normalizeProviderId("Gemini")).toBe("google");
       expect(normalizeProviderId("Z.ai")).toBe("zai");
       expect(normalizeProviderId("z-ai")).toBe("zai");
       expect(normalizeProviderId("OpenCode-Zen")).toBe("opencode");
@@ -26,6 +27,10 @@ describe("model-selection", () => {
       expect(parseModelRef("anthropic/claude-3-5-sonnet", "openai")).toEqual({
         provider: "anthropic",
         model: "claude-3-5-sonnet",
+      });
+      expect(parseModelRef("gemini/gemini-2.0-flash", "openai")).toEqual({
+        provider: "google",
+        model: "gemini-2.0-flash",
       });
     });
 
