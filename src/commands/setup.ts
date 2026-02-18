@@ -1,4 +1,3 @@
-import JSON5 from "json5";
 import fs from "node:fs/promises";
 import type { RuntimeEnv } from "../runtime.js";
 import { applyRecommendedWorkflowLaneConfig } from "../agents/workflow-lane-presets.js";
@@ -6,6 +5,7 @@ import { DEFAULT_AGENT_WORKSPACE_DIR, ensureAgentWorkspace } from "../agents/wor
 import { type OpenClawConfig, createConfigIO, writeConfigFile } from "../config/config.js";
 import { formatConfigPath, logConfigUpdated } from "../config/logging.js";
 import { resolveSessionTranscriptsDir } from "../config/sessions.js";
+import type { RuntimeEnv } from "../runtime.js";
 import { defaultRuntime } from "../runtime.js";
 import { shortenHomePath } from "../utils.js";
 

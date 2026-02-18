@@ -14,7 +14,7 @@ vi.mock("./gateway-rpc.js", async () => {
   return {
     ...actual,
     callGatewayFromCli: (method: string, opts: unknown, params?: unknown, extra?: unknown) =>
-      callGatewayFromCli(method, opts, params, extra),
+      callGatewayFromCli(method, opts, params, extra as number | undefined),
   };
 });
 
@@ -32,9 +32,18 @@ const { registerCronCli } = await import("./cron-cli.js");
 
 type CronUpdatePatch = {
   patch?: {
-    payload?: { message?: string };
+    payload?: { message?: string; model?: string; thinking?: string };
     delivery?: { mode?: string; channel?: string; to?: string; bestEffort?: boolean };
   };
+};
+
+type CronAddParams = {
+  schedule?: { kind?: string; staggerMs?: number };
+  payload?: { model?: string; thinking?: string };
+  delivery?: { mode?: string };
+  deleteAfterRun?: boolean;
+  agentId?: string;
+  sessionTarget?: string;
 };
 
 function buildProgram() {
@@ -44,17 +53,30 @@ function buildProgram() {
   return program;
 }
 
+function resetGatewayMock() {
+  callGatewayFromCli.mockReset();
+  callGatewayFromCli.mockImplementation(defaultGatewayMock);
+}
+
 async function runCronEditAndGetPatch(editArgs: string[]): Promise<CronUpdatePatch> {
-  callGatewayFromCli.mockClear();
+  resetGatewayMock();
   const program = buildProgram();
   await program.parseAsync(["cron", "edit", "job-1", ...editArgs], { from: "user" });
   const updateCall = callGatewayFromCli.mock.calls.find((call) => call[0] === "cron.update");
   return (updateCall?.[2] ?? {}) as CronUpdatePatch;
 }
 
+async function runCronAddAndGetParams(addArgs: string[]): Promise<CronAddParams> {
+  resetGatewayMock();
+  const program = buildProgram();
+  await program.parseAsync(["cron", "add", ...addArgs], { from: "user" });
+  const addCall = callGatewayFromCli.mock.calls.find((call) => call[0] === "cron.add");
+  return (addCall?.[2] ?? {}) as CronAddParams;
+}
+
 describe("cron cli", () => {
   it("trims model and thinking on cron add", { timeout: 60_000 }, async () => {
-    callGatewayFromCli.mockClear();
+    resetGatewayMock();
 
     const program = buildProgram();
 
@@ -88,7 +110,7 @@ describe("cron cli", () => {
   });
 
   it("defaults isolated cron add to announce delivery", async () => {
-    callGatewayFromCli.mockClear();
+    resetGatewayMock();
 
     const program = buildProgram();
 
@@ -115,7 +137,7 @@ describe("cron cli", () => {
   });
 
   it("infers sessionTarget from payload when --session is omitted", async () => {
-    callGatewayFromCli.mockClear();
+    resetGatewayMock();
 
     const program = buildProgram();
 
@@ -129,7 +151,7 @@ describe("cron cli", () => {
     expect(params?.sessionTarget).toBe("main");
     expect(params?.payload?.kind).toBe("systemEvent");
 
-    callGatewayFromCli.mockClear();
+    resetGatewayMock();
 
     await program.parseAsync(
       ["cron", "add", "--name", "Isolated task", "--cron", "* * * * *", "--message", "hello"],
@@ -143,7 +165,7 @@ describe("cron cli", () => {
   });
 
   it("supports --keep-after-run on cron add", async () => {
-    callGatewayFromCli.mockClear();
+    resetGatewayMock();
 
     const program = buildProgram();
 
@@ -170,7 +192,7 @@ describe("cron cli", () => {
   });
 
   it("sends agent id on cron add", async () => {
-    callGatewayFromCli.mockClear();
+    resetGatewayMock();
 
     const program = buildProgram();
 
@@ -198,55 +220,35 @@ describe("cron cli", () => {
   });
 
   it("omits empty model and thinking on cron edit", async () => {
-    callGatewayFromCli.mockClear();
-
-    const program = buildProgram();
-
-    await program.parseAsync(
-      ["cron", "edit", "job-1", "--message", "hello", "--model", "   ", "--thinking", "  "],
-      { from: "user" },
-    );
-
-    const updateCall = callGatewayFromCli.mock.calls.find((call) => call[0] === "cron.update");
-    const patch = updateCall?.[2] as {
-      patch?: { payload?: { model?: string; thinking?: string } };
-    };
+    const patch = await runCronEditAndGetPatch([
+      "--message",
+      "hello",
+      "--model",
+      "   ",
+      "--thinking",
+      "  ",
+    ]);
 
     expect(patch?.patch?.payload?.model).toBeUndefined();
     expect(patch?.patch?.payload?.thinking).toBeUndefined();
   });
 
   it("trims model and thinking on cron edit", async () => {
-    callGatewayFromCli.mockClear();
-
-    const program = buildProgram();
-
-    await program.parseAsync(
-      [
-        "cron",
-        "edit",
-        "job-1",
-        "--message",
-        "hello",
-        "--model",
-        "  opus  ",
-        "--thinking",
-        "  high  ",
-      ],
-      { from: "user" },
-    );
-
-    const updateCall = callGatewayFromCli.mock.calls.find((call) => call[0] === "cron.update");
-    const patch = updateCall?.[2] as {
-      patch?: { payload?: { model?: string; thinking?: string } };
-    };
+    const patch = await runCronEditAndGetPatch([
+      "--message",
+      "hello",
+      "--model",
+      "  opus  ",
+      "--thinking",
+      "  high  ",
+    ]);
 
     expect(patch?.patch?.payload?.model).toBe("opus");
     expect(patch?.patch?.payload?.thinking).toBe("high");
   });
 
   it("sets and clears agent id on cron edit", async () => {
-    callGatewayFromCli.mockClear();
+    resetGatewayMock();
 
     const program = buildProgram();
 
@@ -258,7 +260,7 @@ describe("cron cli", () => {
     const patch = updateCall?.[2] as { patch?: { agentId?: unknown } };
     expect(patch?.patch?.agentId).toBe("ops");
 
-    callGatewayFromCli.mockClear();
+    resetGatewayMock();
     await program.parseAsync(["cron", "edit", "job-2", "--clear-agent"], {
       from: "user",
     });
@@ -268,7 +270,7 @@ describe("cron cli", () => {
   });
 
   it("allows model/thinking updates without --message", async () => {
-    callGatewayFromCli.mockClear();
+    resetGatewayMock();
 
     const program = buildProgram();
 
@@ -287,7 +289,7 @@ describe("cron cli", () => {
   });
 
   it("updates delivery settings without requiring --message", async () => {
-    callGatewayFromCli.mockClear();
+    resetGatewayMock();
 
     const program = buildProgram();
 
@@ -312,7 +314,7 @@ describe("cron cli", () => {
   });
 
   it("supports --no-deliver on cron edit", async () => {
-    callGatewayFromCli.mockClear();
+    resetGatewayMock();
 
     const program = buildProgram();
 
@@ -328,7 +330,7 @@ describe("cron cli", () => {
   });
 
   it("does not include undefined delivery fields when updating message", async () => {
-    callGatewayFromCli.mockClear();
+    resetGatewayMock();
 
     const program = buildProgram();
 

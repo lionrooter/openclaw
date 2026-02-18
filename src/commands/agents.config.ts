@@ -1,10 +1,9 @@
-import type { AgentIdentityFile } from "../agents/identity-file.js";
-import type { OpenClawConfig } from "../config/config.js";
 import {
   resolveAgentDir,
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
 } from "../agents/agent-scope.js";
+import type { AgentIdentityFile } from "../agents/identity-file.js";
 import {
   identityHasValues,
   loadAgentIdentityFromWorkspace,

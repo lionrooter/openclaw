@@ -20,6 +20,7 @@ Related:
 openclaw security audit
 openclaw security audit --deep
 openclaw security audit --fix
+openclaw security audit --json
 ```
 
 The audit warns when multiple DM senders share the main session and recommends **secure DM mode**: `session.dmScope="per-channel-peer"` (or `per-account-channel-peer` for multi-account channels) for shared inboxes.
@@ -28,3 +29,33 @@ For webhook ingress, it warns when `hooks.defaultSessionKey` is unset, when requ
 It also flags unsafe external-content bypass settings for hooks (`hooks.gmail.allowUnsafeExternalContent=true` and `hooks.mappings[].allowUnsafeExternalContent=true`), with higher severity when the gateway is remotely exposed.
 It also flags permissive OpenResponses URL ingestion when `/v1/responses` is enabled with URL fetch allowed but no `urlAllowlist` on `files`/`images`.
 It also warns when sandbox Docker settings are configured while sandbox mode is off, when `gateway.nodes.denyCommands` uses ineffective pattern-like/unknown entries, when global `tools.profile="minimal"` is overridden by agent tool profiles, and when installed extension plugin tools may be reachable under permissive tool policy.
+
+## JSON output
+
+Use `--json` for CI/policy checks:
+
+```bash
+openclaw security audit --json | jq '.summary'
+openclaw security audit --deep --json | jq '.findings[] | select(.severity=="critical") | .checkId'
+```
+
+If `--fix` and `--json` are combined, output includes both fix actions and final report:
+
+```bash
+openclaw security audit --fix --json | jq '{fix: .fix.ok, summary: .report.summary}'
+```
+
+## What `--fix` changes
+
+`--fix` applies safe, deterministic remediations:
+
+- flips common `groupPolicy="open"` to `groupPolicy="allowlist"` (including account variants in supported channels)
+- sets `logging.redactSensitive` from `"off"` to `"tools"`
+- tightens permissions for state/config and common sensitive files (`credentials/*.json`, `auth-profiles.json`, `sessions.json`, session `*.jsonl`)
+
+`--fix` does **not**:
+
+- rotate tokens/passwords/API keys
+- disable tools (`gateway`, `cron`, `exec`, etc.)
+- change gateway bind/auth/network exposure choices
+- remove or rewrite plugins/skills

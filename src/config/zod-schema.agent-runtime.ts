@@ -29,6 +29,7 @@ export const HeartbeatSchema = z
     accountId: z.string().optional(),
     prompt: z.string().optional(),
     ackMaxChars: z.number().int().nonnegative().optional(),
+    suppressToolErrorWarnings: z.boolean().optional(),
   })
   .strict()
   .superRefine((val, ctx) => {
@@ -449,6 +450,7 @@ export const AgentToolsSchema = z
       .optional(),
     exec: AgentToolExecSchema,
     fs: ToolFsSchema,
+    loopDetection: ToolLoopDetectionSchema,
     sandbox: z
       .object({
         tools: ToolPolicySchema,
@@ -563,6 +565,20 @@ export const MemorySearchSchema = z
             vectorWeight: z.number().min(0).max(1).optional(),
             textWeight: z.number().min(0).max(1).optional(),
             candidateMultiplier: z.number().int().positive().optional(),
+            mmr: z
+              .object({
+                enabled: z.boolean().optional(),
+                lambda: z.number().min(0).max(1).optional(),
+              })
+              .strict()
+              .optional(),
+            temporalDecay: z
+              .object({
+                enabled: z.boolean().optional(),
+                halfLifeDays: z.number().int().positive().optional(),
+              })
+              .strict()
+              .optional(),
           })
           .strict()
           .optional(),
@@ -634,6 +650,7 @@ export const ToolsSchema = z
       })
       .strict()
       .optional(),
+    loopDetection: ToolLoopDetectionSchema,
     message: z
       .object({
         allowCrossContextSend: z.boolean().optional(),

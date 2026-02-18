@@ -1,19 +1,20 @@
 import fs from "node:fs/promises";
-import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WizardPrompter } from "../wizard/prompts.js";
-import type { AuthChoice } from "./onboard-types.js";
-import { captureEnv } from "../test-utils/env.js";
 import { applyAuthChoice, resolvePreferredProviderForAuthChoice } from "./auth-choice.js";
 import {
   MINIMAX_CN_API_BASE_URL,
   ZAI_CODING_CN_BASE_URL,
   ZAI_CODING_GLOBAL_BASE_URL,
 } from "./onboard-auth.js";
+import type { AuthChoice } from "./onboard-types.js";
 import {
+  authProfilePathForAgent,
+  createAuthTestLifecycle,
   createExitThrowingRuntime,
   createWizardPrompter,
   readAuthProfilesForAgent,
+  requireOpenClawAgentDir,
   setupAuthTestEnv,
 } from "./test-wizard-helpers.js";
 
@@ -31,14 +32,6 @@ vi.mock("../plugins/providers.js", () => ({
   resolvePluginProviders,
 }));
 
-const authProfilePathFor = (agentDir: string) => path.join(agentDir, "auth-profiles.json");
-const requireAgentDir = () => {
-  const agentDir = process.env.OPENCLAW_AGENT_DIR;
-  if (!agentDir) {
-    throw new Error("OPENCLAW_AGENT_DIR not set");
-  }
-  return agentDir;
-};
 type StoredAuthProfile = {
   key?: string;
   access?: string;
@@ -50,7 +43,7 @@ type StoredAuthProfile = {
 };
 
 describe("applyAuthChoice", () => {
-  const envSnapshot = captureEnv([
+  const lifecycle = createAuthTestLifecycle([
     "OPENCLAW_STATE_DIR",
     "OPENCLAW_AGENT_DIR",
     "PI_CODING_AGENT_DIR",
@@ -64,18 +57,40 @@ describe("applyAuthChoice", () => {
     "SSH_TTY",
     "CHUTES_CLIENT_ID",
   ]);
-  let tempStateDir: string | null = null;
   async function setupTempState() {
     const env = await setupAuthTestEnv("openclaw-auth-");
-    tempStateDir = env.stateDir;
+    lifecycle.setStateDir(env.stateDir);
   }
   function createPrompter(overrides: Partial<WizardPrompter>): WizardPrompter {
     return createWizardPrompter(overrides, { defaultSelect: "" });
   }
+  function createSelectFirstOption(): WizardPrompter["select"] {
+    return vi.fn(async (params) => params.options[0]?.value as never);
+  }
+  function createNoopMultiselect(): WizardPrompter["multiselect"] {
+    return vi.fn(async () => []);
+  }
+  function createApiKeyPromptHarness(
+    overrides: Partial<Pick<WizardPrompter, "select" | "multiselect" | "text" | "confirm">> = {},
+  ): {
+    select: WizardPrompter["select"];
+    multiselect: WizardPrompter["multiselect"];
+    prompter: WizardPrompter;
+    runtime: ReturnType<typeof createExitThrowingRuntime>;
+  } {
+    const select = overrides.select ?? createSelectFirstOption();
+    const multiselect = overrides.multiselect ?? createNoopMultiselect();
+    return {
+      select,
+      multiselect,
+      prompter: createPrompter({ ...overrides, select, multiselect }),
+      runtime: createExitThrowingRuntime(),
+    };
+  }
   async function readAuthProfiles() {
     return await readAuthProfilesForAgent<{
       profiles?: Record<string, StoredAuthProfile>;
-    }>(requireAgentDir());
+    }>(requireOpenClawAgentDir());
   }
   async function readAuthProfile(profileId: string) {
     return (await readAuthProfiles()).profiles?.[profileId];
@@ -86,11 +101,7 @@ describe("applyAuthChoice", () => {
     resolvePluginProviders.mockReset();
     loginOpenAICodexOAuth.mockReset();
     loginOpenAICodexOAuth.mockResolvedValue(null);
-    if (tempStateDir) {
-      await fs.rm(tempStateDir, { recursive: true, force: true });
-      tempStateDir = null;
-    }
-    envSnapshot.restore();
+    await lifecycle.cleanup();
   });
 
   it("does not throw when openai-codex oauth fails", async () => {
@@ -116,12 +127,7 @@ describe("applyAuthChoice", () => {
     await setupTempState();
 
     const text = vi.fn().mockResolvedValue("sk-minimax-test");
-    const select: WizardPrompter["select"] = vi.fn(
-      async (params) => params.options[0]?.value as never,
-    );
-    const multiselect: WizardPrompter["multiselect"] = vi.fn(async () => []);
-    const prompter = createPrompter({ select, multiselect, text });
-    const runtime = createExitThrowingRuntime();
+    const { prompter, runtime } = createApiKeyPromptHarness({ text });
 
     const result = await applyAuthChoice({
       authChoice: "minimax-api",
@@ -146,12 +152,7 @@ describe("applyAuthChoice", () => {
     await setupTempState();
 
     const text = vi.fn().mockResolvedValue("sk-minimax-test");
-    const select: WizardPrompter["select"] = vi.fn(
-      async (params) => params.options[0]?.value as never,
-    );
-    const multiselect: WizardPrompter["multiselect"] = vi.fn(async () => []);
-    const prompter = createPrompter({ select, multiselect, text });
-    const runtime = createExitThrowingRuntime();
+    const { prompter, runtime } = createApiKeyPromptHarness({ text });
 
     const result = await applyAuthChoice({
       authChoice: "minimax-api-key-cn",
@@ -177,12 +178,7 @@ describe("applyAuthChoice", () => {
     await setupTempState();
 
     const text = vi.fn().mockResolvedValue("sk-synthetic-test");
-    const select: WizardPrompter["select"] = vi.fn(
-      async (params) => params.options[0]?.value as never,
-    );
-    const multiselect: WizardPrompter["multiselect"] = vi.fn(async () => []);
-    const prompter = createPrompter({ select, multiselect, text });
-    const runtime = createExitThrowingRuntime();
+    const { prompter, runtime } = createApiKeyPromptHarness({ text });
 
     const result = await applyAuthChoice({
       authChoice: "synthetic-api-key",
@@ -207,12 +203,7 @@ describe("applyAuthChoice", () => {
     await setupTempState();
 
     const text = vi.fn().mockResolvedValue("hf-test-token");
-    const select: WizardPrompter["select"] = vi.fn(
-      async (params) => params.options[0]?.value as never,
-    );
-    const multiselect: WizardPrompter["multiselect"] = vi.fn(async () => []);
-    const prompter = createPrompter({ select, multiselect, text });
-    const runtime = createExitThrowingRuntime();
+    const { prompter, runtime } = createApiKeyPromptHarness({ text });
 
     const result = await applyAuthChoice({
       authChoice: "huggingface-api-key",
@@ -244,13 +235,10 @@ describe("applyAuthChoice", () => {
       }
       return "default";
     });
-    const multiselect: WizardPrompter["multiselect"] = vi.fn(async () => []);
-    const prompter = createPrompter({
+    const { prompter, runtime } = createApiKeyPromptHarness({
       select: select as WizardPrompter["select"],
-      multiselect,
       text,
     });
-    const runtime = createExitThrowingRuntime();
 
     const result = await applyAuthChoice({
       authChoice: "zai-api-key",
@@ -274,13 +262,10 @@ describe("applyAuthChoice", () => {
 
     const text = vi.fn().mockResolvedValue("zai-test-key");
     const select = vi.fn(async () => "default");
-    const multiselect: WizardPrompter["multiselect"] = vi.fn(async () => []);
-    const prompter = createPrompter({
+    const { prompter, runtime } = createApiKeyPromptHarness({
       select: select as WizardPrompter["select"],
-      multiselect,
       text,
     });
-    const runtime = createExitThrowingRuntime();
 
     const result = await applyAuthChoice({
       authChoice: "zai-coding-global",
@@ -302,13 +287,8 @@ describe("applyAuthChoice", () => {
     delete process.env.HUGGINGFACE_HUB_TOKEN;
 
     const text = vi.fn().mockResolvedValue("should-not-be-used");
-    const select: WizardPrompter["select"] = vi.fn(
-      async (params) => params.options[0]?.value as never,
-    );
-    const multiselect: WizardPrompter["multiselect"] = vi.fn(async () => []);
     const confirm = vi.fn(async () => false);
-    const prompter = createPrompter({ select, multiselect, text, confirm });
-    const runtime = createExitThrowingRuntime();
+    const { prompter, runtime } = createApiKeyPromptHarness({ text, confirm });
 
     const result = await applyAuthChoice({
       authChoice: "apiKey",
@@ -335,12 +315,7 @@ describe("applyAuthChoice", () => {
     await setupTempState();
 
     const text = vi.fn().mockResolvedValue("sk-xai-test");
-    const select: WizardPrompter["select"] = vi.fn(
-      async (params) => params.options[0]?.value as never,
-    );
-    const multiselect: WizardPrompter["multiselect"] = vi.fn(async () => []);
-    const prompter = createPrompter({ select, multiselect, text });
-    const runtime = createExitThrowingRuntime();
+    const { prompter, runtime } = createApiKeyPromptHarness({ text });
 
     const result = await applyAuthChoice({
       authChoice: "xai-api-key",
@@ -391,7 +366,7 @@ describe("applyAuthChoice", () => {
       if (previousIsTTYDescriptor) {
         Object.defineProperty(stdin, "isTTY", previousIsTTYDescriptor);
       } else if (!hadOwnIsTTY) {
-        delete stdin.isTTY;
+        delete (stdin as { isTTY?: boolean }).isTTY;
       }
     }
   });
@@ -400,12 +375,7 @@ describe("applyAuthChoice", () => {
     await setupTempState();
 
     const text = vi.fn().mockResolvedValue("sk-opencode-zen-test");
-    const select: WizardPrompter["select"] = vi.fn(
-      async (params) => params.options[0]?.value as never,
-    );
-    const multiselect: WizardPrompter["multiselect"] = vi.fn(async () => []);
-    const prompter = createPrompter({ select, multiselect, text });
-    const runtime = createExitThrowingRuntime();
+    const { prompter, runtime } = createApiKeyPromptHarness({ text });
 
     const result = await applyAuthChoice({
       authChoice: "opencode-zen",
@@ -484,13 +454,8 @@ describe("applyAuthChoice", () => {
     process.env.OPENROUTER_API_KEY = "sk-openrouter-test";
 
     const text = vi.fn();
-    const select: WizardPrompter["select"] = vi.fn(
-      async (params) => params.options[0]?.value as never,
-    );
-    const multiselect: WizardPrompter["multiselect"] = vi.fn(async () => []);
     const confirm = vi.fn(async () => true);
-    const prompter = createPrompter({ select, multiselect, text, confirm });
-    const runtime = createExitThrowingRuntime();
+    const { prompter, runtime } = createApiKeyPromptHarness({ text, confirm });
 
     const result = await applyAuthChoice({
       authChoice: "openrouter-api-key",
@@ -521,8 +486,7 @@ describe("applyAuthChoice", () => {
     await setupTempState();
     process.env.LITELLM_API_KEY = "sk-litellm-test";
 
-    const authProfilePath = authProfilePathFor(requireAgentDir());
-    await fs.mkdir(path.dirname(authProfilePath), { recursive: true });
+    const authProfilePath = authProfilePathForAgent(requireOpenClawAgentDir());
     await fs.writeFile(
       authProfilePath,
       JSON.stringify(
@@ -545,13 +509,8 @@ describe("applyAuthChoice", () => {
     );
 
     const text = vi.fn();
-    const select: WizardPrompter["select"] = vi.fn(
-      async (params) => params.options[0]?.value as never,
-    );
-    const multiselect: WizardPrompter["multiselect"] = vi.fn(async () => []);
     const confirm = vi.fn(async () => true);
-    const prompter = createPrompter({ select, multiselect, text, confirm });
-    const runtime = createExitThrowingRuntime();
+    const { prompter, runtime } = createApiKeyPromptHarness({ text, confirm });
 
     const result = await applyAuthChoice({
       authChoice: "litellm-api-key",
@@ -590,13 +549,8 @@ describe("applyAuthChoice", () => {
     process.env.AI_GATEWAY_API_KEY = "gateway-test-key";
 
     const text = vi.fn();
-    const select: WizardPrompter["select"] = vi.fn(
-      async (params) => params.options[0]?.value as never,
-    );
-    const multiselect: WizardPrompter["multiselect"] = vi.fn(async () => []);
     const confirm = vi.fn(async () => true);
-    const prompter = createPrompter({ select, multiselect, text, confirm });
-    const runtime = createExitThrowingRuntime();
+    const { prompter, runtime } = createApiKeyPromptHarness({ text, confirm });
 
     const result = await applyAuthChoice({
       authChoice: "ai-gateway-api-key",
@@ -633,13 +587,8 @@ describe("applyAuthChoice", () => {
       .fn()
       .mockResolvedValueOnce("cf-account-id")
       .mockResolvedValueOnce("cf-gateway-id");
-    const select: WizardPrompter["select"] = vi.fn(
-      async (params) => params.options[0]?.value as never,
-    );
-    const multiselect: WizardPrompter["multiselect"] = vi.fn(async () => []);
     const confirm = vi.fn(async () => true);
-    const prompter = createPrompter({ select, multiselect, text, confirm });
-    const runtime = createExitThrowingRuntime();
+    const { prompter, runtime } = createApiKeyPromptHarness({ text, confirm });
 
     const result = await applyAuthChoice({
       authChoice: "cloudflare-ai-gateway-api-key",
@@ -704,7 +653,8 @@ describe("applyAuthChoice", () => {
     const runtime = createExitThrowingRuntime();
     const text: WizardPrompter["text"] = vi.fn(async (params) => {
       if (params.message === "Paste the redirect URL") {
-        const lastLog = runtime.log.mock.calls.at(-1)?.[0];
+        const runtimeLog = runtime.log as ReturnType<typeof vi.fn>;
+        const lastLog = runtimeLog.mock.calls.at(-1)?.[0];
         const urlLine = typeof lastLog === "string" ? lastLog : String(lastLog ?? "");
         const urlMatch = urlLine.match(/https?:\/\/\S+/)?.[0] ?? "";
         const state = urlMatch ? new URL(urlMatch).searchParams.get("state") : null;
@@ -715,11 +665,7 @@ describe("applyAuthChoice", () => {
       }
       return "code_manual";
     });
-    const select: WizardPrompter["select"] = vi.fn(
-      async (params) => params.options[0]?.value as never,
-    );
-    const multiselect: WizardPrompter["multiselect"] = vi.fn(async () => []);
-    const prompter = createPrompter({ select, multiselect, text });
+    const { prompter } = createApiKeyPromptHarness({ text });
 
     const result = await applyAuthChoice({
       authChoice: "chutes",
@@ -789,7 +735,7 @@ describe("applyAuthChoice", () => {
           },
         ],
       },
-    ]);
+    ] as never);
 
     const prompter = createPrompter({});
     const runtime = createExitThrowingRuntime();
@@ -861,7 +807,7 @@ describe("applyAuthChoice", () => {
           },
         ],
       },
-    ]);
+    ] as never);
 
     const prompter = createPrompter({
       select: vi.fn(async () => "oauth" as never) as WizardPrompter["select"],

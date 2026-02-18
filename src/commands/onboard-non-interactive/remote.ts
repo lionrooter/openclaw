@@ -3,9 +3,12 @@ import type { RuntimeEnv } from "../../runtime.js";
 import type { OnboardOptions } from "../onboard-types.js";
 import { applyRecommendedWorkflowLaneConfig } from "../../agents/workflow-lane-presets.js";
 import { formatCliCommand } from "../../cli/command-format.js";
+import type { OpenClawConfig } from "../../config/config.js";
 import { writeConfigFile } from "../../config/config.js";
 import { logConfigUpdated } from "../../config/logging.js";
+import type { RuntimeEnv } from "../../runtime.js";
 import { applyWizardMetadata } from "../onboard-helpers.js";
+import type { OnboardOptions } from "../onboard-types.js";
 
 export async function runNonInteractiveOnboardingRemote(params: {
   opts: OnboardOptions;
