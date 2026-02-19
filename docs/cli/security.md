@@ -29,6 +29,8 @@ For webhook ingress, it warns when `hooks.defaultSessionKey` is unset, when requ
 It also flags unsafe external-content bypass settings for hooks (`hooks.gmail.allowUnsafeExternalContent=true` and `hooks.mappings[].allowUnsafeExternalContent=true`), with higher severity when the gateway is remotely exposed.
 It also flags permissive OpenResponses URL ingestion when `/v1/responses` is enabled with URL fetch allowed but no `urlAllowlist` on `files`/`images`.
 It also warns when sandbox Docker settings are configured while sandbox mode is off, when `gateway.nodes.denyCommands` uses ineffective pattern-like/unknown entries, when global `tools.profile="minimal"` is overridden by agent tool profiles, and when installed extension plugin tools may be reachable under permissive tool policy.
+It also warns when npm-based plugin/hook install records are unpinned, missing integrity metadata, or drift from currently installed package versions.
+It warns when `gateway.auth.mode="none"` leaves Gateway HTTP APIs reachable without a shared secret (`/tools/invoke` plus any enabled `/v1/*` endpoint).
 
 ## JSON output
 

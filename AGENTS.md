@@ -178,6 +178,7 @@ pnpm test         # Unit tests
 
 ## GHSA (Repo Advisory) Patch/Publish
 
+- Before reviewing security advisories, read `SECURITY.md`.
 - Fetch: `gh api /repos/openclaw/openclaw/security-advisories/<GHSA>`
 - Latest npm: `npm view openclaw version --userconfig "$(mktemp)"`
 - Private fork PRs must be closed:

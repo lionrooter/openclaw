@@ -97,3 +97,7 @@ skills/holocube/
 skills/nano-banana-pro/*.png
 skills/spotify-applescript/
 extensions/matrix/matrix
+.claude/settings.local.json
+
+# Local iOS signing overrides
+apps/ios/LocalSigning.xcconfig

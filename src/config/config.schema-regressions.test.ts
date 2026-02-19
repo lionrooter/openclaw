@@ -109,4 +109,59 @@ describe("config schema regressions", () => {
       ).toBe(true);
     }
   });
+
+  it("accepts safe iMessage remoteHost", () => {
+    const res = validateConfigObject({
+      channels: {
+        imessage: {
+          remoteHost: "bot@gateway-host",
+        },
+      },
+    });
+
+    expect(res.ok).toBe(true);
+  });
+
+  it("rejects unsafe iMessage remoteHost", () => {
+    const res = validateConfigObject({
+      channels: {
+        imessage: {
+          remoteHost: "bot@gateway-host -oProxyCommand=whoami",
+        },
+      },
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.issues[0]?.path).toBe("channels.imessage.remoteHost");
+    }
+  });
+
+  it("accepts iMessage attachment root patterns", () => {
+    const res = validateConfigObject({
+      channels: {
+        imessage: {
+          attachmentRoots: ["/Users/*/Library/Messages/Attachments"],
+          remoteAttachmentRoots: ["/Volumes/relay/attachments"],
+        },
+      },
+    });
+
+    expect(res.ok).toBe(true);
+  });
+
+  it("rejects relative iMessage attachment roots", () => {
+    const res = validateConfigObject({
+      channels: {
+        imessage: {
+          attachmentRoots: ["./attachments"],
+        },
+      },
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.issues[0]?.path).toBe("channels.imessage.attachmentRoots.0");
+    }
+  });
 });
