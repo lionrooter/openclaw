@@ -1,10 +1,10 @@
-import { getChannelPlugin } from "../../channels/plugins/index.js";
 import type {
   ChannelDirectoryEntry,
   ChannelDirectoryEntryKind,
   ChannelId,
 } from "../../channels/plugins/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
+import { getChannelPlugin } from "../../channels/plugins/index.js";
 import { defaultRuntime, type RuntimeEnv } from "../../runtime.js";
 import { buildDirectoryCacheKey, DirectoryCache } from "./directory-cache.js";
 import { ambiguousTargetError, unknownTargetError } from "./target-errors.js";
@@ -157,6 +157,16 @@ function detectTargetKind(
   const trimmed = raw.trim();
   if (!trimmed) {
     return "group";
+  }
+
+  if (channel === "zulip") {
+    const unprefixed = trimmed.replace(/^zulip:/i, "");
+    if (/^dm:/i.test(unprefixed)) {
+      return "user";
+    }
+    if (/^stream:/i.test(unprefixed)) {
+      return "group";
+    }
   }
 
   if (trimmed.startsWith("@") || /^<@!?/.test(trimmed) || /^user:/i.test(trimmed)) {

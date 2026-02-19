@@ -25,6 +25,10 @@ export type CronEvent = {
   sessionId?: string;
   sessionKey?: string;
   nextRunAtMs?: number;
+  // Usage ledger attribution
+  source?: string;
+  correlationId?: string;
+  cronJobId?: string;
 } & CronRunTelemetry;
 
 export type Logger = {

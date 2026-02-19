@@ -3,12 +3,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionEntry } from "../../config/sessions.js";
-import * as sessions from "../../config/sessions.js";
 import type { TypingMode } from "../../config/types.js";
 import { withStateDirEnv } from "../../test-helpers/state-dir-env.js";
 import type { TemplateContext } from "../templating.js";
 import type { GetReplyOptions } from "../types.js";
 import type { FollowupRun, QueueSettings } from "./queue.js";
+import * as sessions from "../../config/sessions.js";
 import { createMockTypingController } from "./test-helpers.js";
 
 type AgentRunParams = {
@@ -550,6 +550,48 @@ describe("runReplyAgent typing (heartbeat)", () => {
     await runPromise;
     expect(calls).toBe(2);
     vi.useRealTimers();
+  });
+
+  it("passes explicit followup run groupId to embedded runs before fallback resolution", async () => {
+    const expectedGroupId = "zulip-direct-alice";
+    state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
+      expect(params.groupId).toBe(expectedGroupId);
+      return { payloads: [{ text: "ok" }], meta: {} };
+    });
+
+    const baseRun = createBaseRun({
+      storePath: "/tmp/sessions/sessions.json",
+      sessionEntry: {},
+      runOverrides: {
+        groupId: expectedGroupId,
+      },
+    });
+    await runReplyAgentWithBase({
+      baseRun,
+      storePath: "/tmp/sessions/sessions.json",
+      sessionKey: "main",
+      sessionEntry: {},
+      commandBody: "test",
+    });
+
+    expect(state.runEmbeddedPiAgentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips typing for silent tool results", async () => {
+    const onToolResult = vi.fn();
+    state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: AgentRunParams) => {
+      await params.onToolResult?.({ text: "NO_REPLY", mediaUrls: [] });
+      return { payloads: [{ text: "final" }], meta: {} };
+    });
+
+    const { run, typing } = createMinimalRun({
+      typingMode: "message",
+      opts: { onToolResult },
+    });
+    await run();
+
+    expect(typing.startTypingOnText).not.toHaveBeenCalled();
+    expect(onToolResult).not.toHaveBeenCalled();
   });
 
   it("delivers tool results in order even when dispatched concurrently", async () => {

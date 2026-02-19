@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveGroupSessionKey } from "../../config/sessions.js";
 import { runPreparedReply } from "./get-reply-run.js";
 
 vi.mock("../../agents/auth-profiles/session-override.js", () => ({
@@ -248,5 +249,34 @@ describe("runPreparedReply media-only handling", () => {
     );
 
     expect(vi.mocked(routeReply)).not.toHaveBeenCalled();
+  });
+
+  it("uses zulip direct sender fallback for followup groupId when session key is not grouped", async () => {
+    vi.mocked(resolveGroupSessionKey).mockReturnValue(null);
+
+    const result = await runPreparedReply(
+      baseParams({
+        ctx: {
+          Body: "hello",
+          CommandBody: "hello",
+          RawBody: "hello",
+        },
+        sessionCtx: {
+          Body: "hello",
+          BodyStripped: "hello",
+          Provider: "zulip",
+          ChatType: "direct",
+          From: "zulip:alice",
+          SenderId: "user:alice",
+          OriginatingChannel: "zulip",
+          OriginatingTo: "DM-target",
+          MediaPath: "/tmp/input.png",
+        },
+      }),
+    );
+
+    expect(result).toEqual({ text: "ok" });
+    const call = vi.mocked(runReplyAgent).mock.calls[0]?.[0];
+    expect(call?.followupRun.run.groupId).toBe("alice");
   });
 });

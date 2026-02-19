@@ -1,5 +1,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import type { FollowupRun } from "./queue.js";
+import type { TypingSignaler } from "./typing-mode.js";
+import { resolveAgentModelFallbacksOverride } from "../../agents/agent-scope.js";
 import { runCliAgent } from "../../agents/cli-runner.js";
 import { getCliSessionId } from "../../agents/cli-session.js";
 import { runWithModelFallback } from "../../agents/model-fallback.js";
@@ -36,9 +39,7 @@ import {
   resolveModelFallbackOptions,
 } from "./agent-runner-utils.js";
 import { type BlockReplyPipeline } from "./block-reply-pipeline.js";
-import type { FollowupRun } from "./queue.js";
 import { createBlockReplyDeliveryHandler } from "./reply-delivery.js";
-import type { TypingSignaler } from "./typing-mode.js";
 
 export type RuntimeFallbackAttempt = {
   provider: string;
@@ -284,7 +285,15 @@ export async function runAgentTurnWithFallback(params: {
           });
           return runEmbeddedPiAgent({
             ...embeddedContext,
-            groupId: resolveGroupSessionKey(params.sessionCtx)?.id,
+            sessionId: params.followupRun.run.sessionId,
+            sessionKey: params.sessionKey,
+            agentId: params.followupRun.run.agentId,
+            messageProvider: params.sessionCtx.Provider?.trim().toLowerCase() || undefined,
+            agentAccountId: params.sessionCtx.AccountId,
+            messageTo: params.sessionCtx.OriginatingTo ?? params.sessionCtx.To,
+            messageThreadId: params.sessionCtx.MessageThreadId ?? undefined,
+            groupId:
+              params.followupRun.run.groupId ?? resolveGroupSessionKey(params.sessionCtx)?.id,
             groupChannel:
               params.sessionCtx.GroupChannel?.trim() ?? params.sessionCtx.GroupSubject?.trim(),
             groupSpace: params.sessionCtx.GroupSpace?.trim() ?? undefined,

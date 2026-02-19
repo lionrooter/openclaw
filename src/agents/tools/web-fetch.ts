@@ -1,12 +1,12 @@
 import { Type } from "@sinclair/typebox";
 import type { OpenClawConfig } from "../../config/config.js";
+import type { AnyAgentTool } from "./common.js";
 import { fetchWithSsrFGuard } from "../../infra/net/fetch-guard.js";
 import { SsrFBlockedError } from "../../infra/net/ssrf.js";
 import { logDebug } from "../../logger.js";
 import { wrapExternalContent, wrapWebContent } from "../../security/external-content.js";
 import { normalizeSecretInput } from "../../utils/normalize-secret-input.js";
 import { stringEnum } from "../schema/typebox.js";
-import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readNumberParam, readStringParam } from "./common.js";
 import {
   extractReadableContent,
@@ -43,6 +43,10 @@ const DEFAULT_FIRECRAWL_BASE_URL = "https://api.firecrawl.dev";
 const DEFAULT_FIRECRAWL_MAX_AGE_MS = 172_800_000;
 const DEFAULT_FETCH_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+const DEFAULT_TWITTER_OEMBED_ENDPOINTS = [
+  "https://publish.twitter.com/oembed",
+  "https://publish.x.com/oembed",
+] as const;
 
 const FETCH_CACHE = new Map<string, CacheEntry<Record<string, unknown>>>();
 
@@ -207,6 +211,36 @@ function looksLikeHtml(value: string): boolean {
   }
   const head = trimmed.slice(0, 256).toLowerCase();
   return head.startsWith("<!doctype html") || head.startsWith("<html");
+}
+
+function resolveTwitterStatusUrl(rawUrl: string): string | null {
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.toLowerCase();
+    if (!(host === "x.com" || host === "twitter.com" || host === "mobile.twitter.com")) {
+      return null;
+    }
+
+    const isStatusUrl = /\/(?:i\/web\/)?status(?:es)?\/(\d+)/i.test(parsed.pathname);
+    if (!isStatusUrl) {
+      return null;
+    }
+
+    if (host === "mobile.twitter.com") {
+      parsed.hostname = "twitter.com";
+    }
+    parsed.hash = "";
+    parsed.search = "";
+    parsed.searchParams.delete("s");
+    parsed.searchParams.delete("t");
+    parsed.searchParams.delete("utm_source");
+    parsed.searchParams.delete("utm_medium");
+    parsed.searchParams.delete("utm_campaign");
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+    return parsed.toString();
+  } catch {
+    return null;
+  }
 }
 
 function formatWebFetchErrorDetail(params: {
@@ -606,7 +640,15 @@ async function runWebFetch(params: WebFetchRuntimeParams): Promise<Record<string
         text = markdownToText(body);
       }
     } else if (contentType.includes("text/html")) {
-      if (params.readabilityEnabled) {
+      const oEmbed = await tryTwitterOEmbedFallback({
+        url: params.url,
+        extractMode: params.extractMode,
+      });
+      if (oEmbed) {
+        text = oEmbed.text;
+        title = oEmbed.title;
+        extractor = "twitter-oembed";
+      } else if (params.readabilityEnabled) {
         const readable = await extractReadableContent({
           html: body,
           url: finalUrl,
@@ -675,6 +717,68 @@ async function runWebFetch(params: WebFetchRuntimeParams): Promise<Record<string
       await release();
     }
   }
+}
+
+async function tryTwitterOEmbedFallback(params: {
+  url: string;
+  extractMode: ExtractMode;
+}): Promise<{ text: string; title?: string } | null> {
+  const normalizedUrl = resolveTwitterStatusUrl(params.url);
+  if (!normalizedUrl) {
+    return null;
+  }
+
+  for (const endpoint of DEFAULT_TWITTER_OEMBED_ENDPOINTS) {
+    let oembedRelease: (() => Promise<void>) | null = null;
+    try {
+      const request = new URL(endpoint);
+      request.searchParams.set("url", normalizedUrl);
+      request.searchParams.set("omit_script", "true");
+
+      const result = await fetchWithSsrFGuard({
+        url: request.toString(),
+        timeoutMs: 10_000,
+        init: {
+          headers: {
+            Accept: "application/json",
+          },
+        },
+      });
+      const res = result.response;
+      oembedRelease = result.release;
+
+      if (!res.ok) {
+        continue;
+      }
+
+      const payload = (await res.json()) as {
+        html?: string;
+        author_name?: string;
+        title?: string;
+      };
+      const markdown = typeof payload.html === "string" ? htmlToMarkdown(payload.html) : null;
+      if (!markdown || !markdown.text.trim()) {
+        continue;
+      }
+      const text = params.extractMode === "text" ? markdownToText(markdown.text) : markdown.text;
+      const title =
+        typeof payload.author_name === "string" && payload.author_name
+          ? payload.author_name
+          : markdown.title;
+      return {
+        text: text.trim(),
+        title,
+      };
+    } catch {
+      continue;
+    } finally {
+      if (oembedRelease) {
+        await oembedRelease();
+      }
+    }
+  }
+
+  return null;
 }
 
 async function tryFirecrawlFallback(

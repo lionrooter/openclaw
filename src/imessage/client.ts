@@ -56,6 +56,9 @@ export class IMessageRpcClient {
   private child: ChildProcessWithoutNullStreams | null = null;
   private reader: Interface | null = null;
   private nextId = 1;
+  private readonly startupErrorLines = new Set<string>();
+  private startupErrorMessage: string | null = null;
+  private startupErrorLogged = false;
 
   constructor(opts: IMessageRpcClientOptions = {}) {
     this.cliPath = opts.cliPath?.trim() || "imsg";
@@ -98,7 +101,9 @@ export class IMessageRpcClient {
         if (!line.trim()) {
           continue;
         }
-        this.runtime?.error?.(`imsg rpc: ${line.trim()}`);
+        if (!this.captureIMessageDiagnostic(line.trim())) {
+          this.runtime?.error?.(`imsg rpc: ${line.trim()}`);
+        }
       }
     });
 
@@ -108,9 +113,13 @@ export class IMessageRpcClient {
     });
 
     child.on("close", (code, signal) => {
+      const startupFailure = this.startupErrorMessage;
       if (code !== 0 && code !== null) {
         const reason = signal ? `signal ${signal}` : `code ${code}`;
-        this.failAll(new Error(`imsg rpc exited (${reason})`));
+        const message = startupFailure
+          ? `${startupFailure} (imsg rpc exited ${reason})`
+          : `imsg rpc exited (${reason})`;
+        this.failAll(new Error(message));
       } else {
         this.failAll(new Error("imsg rpc closed"));
       }
@@ -184,6 +193,9 @@ export class IMessageRpcClient {
   }
 
   private handleLine(line: string) {
+    if (this.captureIMessageDiagnostic(line)) {
+      return;
+    }
     let parsed: IMessageRpcResponse<unknown>;
     try {
       parsed = JSON.parse(line) as IMessageRpcResponse<unknown>;
@@ -233,6 +245,29 @@ export class IMessageRpcClient {
         params: parsed.params,
       });
     }
+  }
+
+  private captureIMessageDiagnostic(line: string): boolean {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      return true;
+    }
+
+    const isPermissionDenied =
+      /^permissionDenied\(/i.test(trimmed) || /authorization denied/i.test(trimmed);
+    if (isPermissionDenied) {
+      this.startupErrorMessage =
+        this.startupErrorMessage ?? `imsg rpc permission denied: ${trimmed}`;
+      const isDuplicate = this.startupErrorLines.has(trimmed);
+      this.startupErrorLines.add(trimmed);
+      if (!isDuplicate && !this.startupErrorLogged) {
+        this.runtime?.error?.(`imsg rpc: ${this.startupErrorMessage}`);
+        this.startupErrorLogged = true;
+      }
+      return true;
+    }
+
+    return false;
   }
 
   private failAll(err: Error) {
