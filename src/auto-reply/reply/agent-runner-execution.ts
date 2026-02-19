@@ -1,5 +1,10 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import type { TemplateContext } from "../templating.js";
+import type { VerboseLevel } from "../thinking.js";
+import type { GetReplyOptions, ReplyPayload } from "../types.js";
+import type { FollowupRun } from "./queue.js";
+import type { TypingSignaler } from "./typing-mode.js";
 import { resolveAgentModelFallbacksOverride } from "../../agents/agent-scope.js";
 import { runCliAgent } from "../../agents/cli-runner.js";
 import { getCliSessionId } from "../../agents/cli-session.js";
@@ -28,10 +33,7 @@ import {
   resolveMessageChannel,
 } from "../../utils/message-channel.js";
 import { stripHeartbeatToken } from "../heartbeat.js";
-import type { TemplateContext } from "../templating.js";
-import type { VerboseLevel } from "../thinking.js";
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../tokens.js";
-import type { GetReplyOptions, ReplyPayload } from "../types.js";
 import {
   buildEmbeddedContextFromTemplate,
   buildTemplateSenderContext,
@@ -39,9 +41,7 @@ import {
 } from "./agent-runner-utils.js";
 import { resolveEnforceFinalTag } from "./agent-runner-utils.js";
 import { type BlockReplyPipeline } from "./block-reply-pipeline.js";
-import type { FollowupRun } from "./queue.js";
 import { createBlockReplyDeliveryHandler } from "./reply-delivery.js";
-import type { TypingSignaler } from "./typing-mode.js";
 
 export type AgentRunLoopResult =
   | {
@@ -271,7 +271,15 @@ export async function runAgentTurnWithFallback(params: {
           const senderContext = buildTemplateSenderContext(params.sessionCtx);
           return runEmbeddedPiAgent({
             ...embeddedContext,
-            groupId: resolveGroupSessionKey(params.sessionCtx)?.id,
+            sessionId: params.followupRun.run.sessionId,
+            sessionKey: params.sessionKey,
+            agentId: params.followupRun.run.agentId,
+            messageProvider: params.sessionCtx.Provider?.trim().toLowerCase() || undefined,
+            agentAccountId: params.sessionCtx.AccountId,
+            messageTo: params.sessionCtx.OriginatingTo ?? params.sessionCtx.To,
+            messageThreadId: params.sessionCtx.MessageThreadId ?? undefined,
+            groupId:
+              params.followupRun.run.groupId ?? resolveGroupSessionKey(params.sessionCtx)?.id,
             groupChannel:
               params.sessionCtx.GroupChannel?.trim() ?? params.sessionCtx.GroupSubject?.trim(),
             groupSpace: params.sessionCtx.GroupSpace?.trim() ?? undefined,

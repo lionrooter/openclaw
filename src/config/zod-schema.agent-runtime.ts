@@ -368,6 +368,27 @@ const ToolCodexDelegateSchema = z
   .strict()
   .optional();
 
+const ToolLoopDetectionDetectorSchema = z
+  .object({
+    genericRepeat: z.boolean().optional(),
+    knownPollNoProgress: z.boolean().optional(),
+    pingPong: z.boolean().optional(),
+  })
+  .strict()
+  .optional();
+
+export const ToolLoopDetectionSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    historySize: z.number().int().positive().optional(),
+    warningThreshold: z.number().int().positive().optional(),
+    criticalThreshold: z.number().int().positive().optional(),
+    globalCircuitBreakerThreshold: z.number().int().positive().optional(),
+    detectors: ToolLoopDetectionDetectorSchema,
+  })
+  .strict()
+  .optional();
+
 export const AgentSandboxSchema = z
   .object({
     mode: z.union([z.literal("off"), z.literal("non-main"), z.literal("all")]).optional(),

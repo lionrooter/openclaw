@@ -1,8 +1,8 @@
 import type { BaseProbeResult } from "../channels/plugins/types.js";
+import type { RuntimeEnv } from "../runtime.js";
 import { detectBinary } from "../commands/onboard-helpers.js";
 import { loadConfig } from "../config/config.js";
 import { runCommandWithTimeout } from "../process/exec.js";
-import type { RuntimeEnv } from "../runtime.js";
 import { createIMessageRpcClient } from "./client.js";
 import { DEFAULT_IMESSAGE_PROBE_TIMEOUT_MS } from "./constants.js";
 
@@ -98,7 +98,13 @@ export async function probeIMessage(
     await client.request("chats.list", { limit: 1 }, { timeoutMs: effectiveTimeout });
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: String(err) };
+    const error = String(err);
+    const isPermissionIssue = /permission denied|authorization denied/i.test(error);
+    return {
+      ok: false,
+      error,
+      fatal: isPermissionIssue,
+    };
   } finally {
     await client.stop();
   }

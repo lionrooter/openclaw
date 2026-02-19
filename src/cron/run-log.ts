@@ -14,6 +14,14 @@ export type CronRunLogEntry = {
   runAtMs?: number;
   durationMs?: number;
   nextRunAtMs?: number;
+
+  // -- Usage ledger attribution --
+  /** Always 'cron' for cron run-log entries. */
+  source?: string;
+  /** Cross-system correlation key (defaults to jobId). */
+  correlationId?: string;
+  /** Cron job ID (explicit duplicate of jobId for ledger compatibility). */
+  cronJobId?: string;
 } & CronRunTelemetry;
 
 export function resolveCronRunLogPath(params: { storePath: string; jobId: string }) {
@@ -131,6 +139,16 @@ export async function readCronRunLogEntries(
       }
       if (typeof obj.sessionKey === "string" && obj.sessionKey.trim().length > 0) {
         entry.sessionKey = obj.sessionKey;
+      }
+      // Usage ledger attribution fields
+      if (typeof obj.source === "string" && obj.source.trim().length > 0) {
+        entry.source = obj.source;
+      }
+      if (typeof obj.correlationId === "string" && obj.correlationId.trim().length > 0) {
+        entry.correlationId = obj.correlationId;
+      }
+      if (typeof obj.cronJobId === "string" && obj.cronJobId.trim().length > 0) {
+        entry.cronJobId = obj.cronJobId;
       }
       parsed.push(entry);
     } catch {

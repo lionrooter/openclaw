@@ -3,6 +3,7 @@ import {
   DmPolicySchema,
   GroupPolicySchema,
   MarkdownConfigSchema,
+  ToolPolicySchema,
   requireOpenAllowFrom,
 } from "openclaw/plugin-sdk";
 import { z } from "zod";
@@ -69,6 +70,14 @@ const ZulipXCaseSchema = z
   })
   .optional();
 
+const ZulipGroupSchema = z
+  .object({
+    tools: ToolPolicySchema,
+    toolsBySender: z.record(z.string().min(1), ToolPolicySchema).optional(),
+  })
+  .strict()
+  .optional();
+
 const ZulipAccountSchemaBase = z
   .object({
     name: z.string().optional(),
@@ -89,6 +98,7 @@ const ZulipAccountSchemaBase = z
     chunkMode: z.enum(["length", "newline"]).optional(),
     blockStreaming: z.boolean().optional(),
     blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
+    groups: z.record(z.string().min(1), ZulipGroupSchema).optional(),
     topic: ZulipTopicSchema,
     xcase: ZulipXCaseSchema,
   })

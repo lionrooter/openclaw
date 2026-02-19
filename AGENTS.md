@@ -48,6 +48,12 @@
   `pkill -9 -f openclaw-gateway || true; nohup openclaw gateway run --bind loopback --port 18789 --force > /tmp/openclaw-gateway.log 2>&1 &`
 - Verify: `openclaw channels status --probe`, `ss -ltnp | rg 18789`, `tail -n 120 /tmp/openclaw-gateway.log`.
 
+## Lionroot fork/upstream policy
+
+- For Lionroot deployment remotes and sync loop, use `docs/reference/agent-ops/fork-sync.md`.
+- In `clawdbot`, `origin` must be the writable fork and `upstream` must be `openclaw/openclaw`.
+- `command-post` is not a separate git repo; it is part of `lionroot-openclaw`.
+
 ## Build, Test, and Development Commands
 
 - Runtime baseline: Node **22+** (keep Node + Bun paths working).
@@ -282,3 +288,31 @@ pnpm test         # Unit tests
   - `node --import tsx scripts/release-check.ts`
   - `pnpm release:check`
   - `pnpm test:install:smoke` or `OPENCLAW_INSTALL_SMOKE_SKIP_NONROOT=1 pnpm test:install:smoke` for non-root smoke path.
+
+## Flow-Next + RepoPrompt + Codex Contract
+
+Canonical workflow source: `/Users/lionheart/clawd/workflows/cody/cody_Workflow-SKILL.md`.
+
+Execution policy:
+
+- Orchestrate with `/flow-next:*`.
+- Use `rp-cli` before and after coding (`ANCHOR` + `REVIEW` gates).
+- Use Codex multi-agent roles for execution/review assistance, not as a replacement for Flow-Next planning.
+- Keep Ralph loop discipline: `ANCHOR -> EXECUTE -> REVIEW -> TEST -> GATE`.
+
+## Universal Cody Workflow Gate
+
+Canonical source: `/Users/lionheart/clawd/workflows/cody/cody_Workflow-SKILL.md`
+
+Hard gate for non-trivial coding work:
+
+- `.workflow/prd.md` exists and is approved.
+- `.workflow/plan.md` exists and is approved.
+- Required loop: `ANCHOR -> EXECUTE -> REVIEW -> TEST -> GATE`.
+- Use `/flow-next:*` command namespace.
+- Use `rp-cli` for ANCHOR and REVIEW when available.
+
+Break-glass (audited):
+
+- `LIONROOT_WORKFLOW_BYPASS=1`
+- Commit footer: `Workflow-Bypass-Reason: <reason>`

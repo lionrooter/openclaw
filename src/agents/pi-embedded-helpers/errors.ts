@@ -1,8 +1,8 @@
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { OpenClawConfig } from "../../config/config.js";
+import type { FailoverReason } from "./types.js";
 import { formatSandboxToolPolicyBlockedMessage } from "../sandbox.js";
 import { stableStringify } from "../stable-stringify.js";
-import type { FailoverReason } from "./types.js";
 
 export function formatBillingErrorMessage(provider?: string): string {
   const providerName = provider?.trim();
@@ -501,6 +501,10 @@ export function formatAssistantErrorText(
   return raw.length > 600 ? `${raw.slice(0, 600)}…` : raw;
 }
 
+// Matches raw Claude CLI protocol/init JSON that should never reach users
+const CLI_PROTOCOL_JSON_RE = /^\s*\{"type"\s*:\s*"(?:system|init|result)"[^}]*\}\s*$/m;
+const CLI_INIT_FIELDS_RE = /\{"type"\s*:\s*"system"\s*,\s*"subtype"\s*:\s*"init"/;
+
 export function sanitizeUserFacingText(text: string, opts?: { errorContext?: boolean }): string {
   if (!text) {
     return text;
@@ -547,6 +551,22 @@ export function sanitizeUserFacingText(text: string, opts?: { errorContext?: boo
       }
       return formatRawAssistantErrorForUi(trimmed);
     }
+  }
+
+  // Strip raw CLI protocol/init JSON that leaked through the proxy.
+  if (CLI_INIT_FIELDS_RE.test(trimmed)) {
+    const cleaned = trimmed.replace(CLI_PROTOCOL_JSON_RE, "").trim();
+    if (!cleaned) {
+      return "";
+    }
+    return collapseConsecutiveDuplicateBlocks(cleaned);
+  }
+
+  if (!errorContext && /incorrect role information|roles must alternate/i.test(trimmed)) {
+    return (
+      "Message ordering conflict - please try again. " +
+      "If this persists, use /new to start a fresh session."
+    );
   }
 
   // Preserve legacy behavior for explicit billing-head text outside known

@@ -1,6 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchZulipMessages, type ZulipClient, type ZulipMessage } from "./client.js";
-import { formatZulipTopicHistoryBody, resolveZulipTopicContext } from "./monitor.js";
+import {
+  formatZulipTopicHistoryBody,
+  processZulipUploads,
+  resolveZulipTopicContext,
+} from "./monitor.js";
 
 vi.mock("./client.js", async () => {
   const actual = await vi.importActual<typeof import("./client.js")>("./client.js");
@@ -70,6 +74,100 @@ describe("formatZulipTopicHistoryBody", () => {
     expect(formatted).toContain("Botty (assistant)");
     expect(formatted).toContain("[zulip message id: 10]");
     expect(formatted).toContain("[zulip message id: 11]");
+  });
+});
+
+describe("processZulipUploads", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("extracts non-text uploads into media paths and types", async () => {
+    const mockedFetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Uint8Array([1, 2, 3, 4]), {
+        status: 200,
+        headers: {
+          "content-type": "image/png",
+          "content-length": "4",
+        },
+      }),
+    );
+
+    const saved = {
+      path: "/tmp/media/meal.heic",
+      contentType: "image/png",
+    };
+    const saveMedia = vi.fn(async () => saved);
+
+    const result = await processZulipUploads(
+      DUMMY_CLIENT,
+      "Breakfast meal [BreakfastLiev](/user_uploads/image_DF2CE095-9465-477A-93E7-CDFAB799867D_1771258400.heic)",
+      1024,
+      saveMedia,
+    );
+
+    expect(result.mediaPaths).toEqual([saved.path]);
+    expect(result.mediaTypes).toEqual([saved.contentType]);
+    expect(result.strippedContent).toContain("[attached: BreakfastLiev]");
+    expect(saveMedia).toHaveBeenCalledTimes(1);
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(result.attachmentInfo).toContain("prepared for model analysis");
+    const saveArg = saveMedia.mock.calls[0][0];
+    expect(saveArg.fileName).toBe("BreakfastLiev");
+    expect(saveArg.contentType).toBe("image/png");
+    expect(saveArg.buffer.length).toBe(4);
+  });
+
+  it("inlines readable text uploads without media paths", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("hello\nworld", {
+        status: 200,
+        headers: {
+          "content-type": "text/plain",
+          "content-length": "11",
+        },
+      }),
+    );
+
+    const saveMedia = vi.fn(async () => null);
+    const result = await processZulipUploads(
+      DUMMY_CLIENT,
+      "Read this [notes.txt](/user_uploads/notes.txt)",
+      1024,
+      saveMedia,
+    );
+
+    expect(result.mediaPaths).toEqual([]);
+    expect(result.mediaTypes).toEqual([]);
+    expect(result.strippedContent).toContain("[attached: notes.txt]");
+    expect(result.attachmentInfo).toContain('📎 File "notes.txt":\n```\nhello\nworld\n```');
+    expect(saveMedia).not.toHaveBeenCalled();
+  });
+
+  it("marks oversized uploads as skipped", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("oversized", {
+        status: 200,
+        headers: {
+          "content-type": "application/octet-stream",
+          "content-length": "20",
+        },
+      }),
+    );
+
+    const saveMedia = vi.fn(async () => null);
+    const result = await processZulipUploads(
+      DUMMY_CLIENT,
+      "Image [oops](/user_uploads/too-large.bin)",
+      10,
+      saveMedia,
+    );
+
+    expect(result.mediaPaths).toEqual([]);
+    expect(result.mediaTypes).toEqual([]);
+    expect(result.attachmentInfo).toContain("skipped — exceeds 0 MB limit");
+    expect(result.strippedContent).toContain("[attached: oops — too large to download]");
+    expect(saveMedia).not.toHaveBeenCalled();
   });
 });
 

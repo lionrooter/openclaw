@@ -9,6 +9,7 @@ import {
   setAccountEnabledInConfigSection,
   type ChannelPlugin,
 } from "openclaw/plugin-sdk";
+import { resolveChannelGroupToolsPolicy } from "../../../src/config/group-policy.js";
 import { ZulipConfigSchema } from "./config-schema.js";
 import { getZulipRuntime } from "./runtime.js";
 import {
@@ -130,11 +131,42 @@ export const zulipPlugin: ChannelPlugin<ResolvedZulipAccount> = {
       ];
     },
   },
+  groups: {
+    resolveToolPolicy: ({
+      cfg,
+      accountId,
+      groupId,
+      senderId,
+      senderName,
+      senderUsername,
+      senderE164,
+    }) =>
+      resolveChannelGroupToolsPolicy({
+        cfg,
+        channel: "zulip",
+        groupId,
+        accountId,
+        senderId,
+        senderName,
+        senderUsername,
+        senderE164,
+      }),
+  },
   messaging: {
     normalizeTarget: (raw) => raw.trim(),
     targetResolver: {
-      looksLikeId: (raw) => /^(stream:|dm:)/i.test(raw.trim()),
-      hint: "<stream:NAME:topic:TOPIC|dm:USER_ID>",
+      looksLikeId: (raw) => {
+        const trimmed = raw.trim();
+        if (!trimmed) {
+          return false;
+        }
+        if (/^(stream:|dm:)/i.test(trimmed)) {
+          return true;
+        }
+        const lastColon = trimmed.lastIndexOf(":");
+        return lastColon > 0 && lastColon < trimmed.length - 1;
+      },
+      hint: "<stream:NAME:topic:TOPIC|stream:NAME:TOPIC|dm:USER_ID>",
     },
   },
   outbound: {

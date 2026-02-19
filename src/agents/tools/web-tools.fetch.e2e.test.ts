@@ -42,6 +42,19 @@ function firecrawlResponse(markdown: string, url = "https://example.com/"): Mock
   };
 }
 
+function twitterOembedResponse(html: string, authorName = "Twitter User"): MockResponse {
+  return {
+    ok: true,
+    status: 200,
+    headers: makeHeaders({ "content-type": "application/json" }),
+    json: async () => ({
+      html,
+      author_name: authorName,
+      provider_name: "Twitter",
+    }),
+  };
+}
+
 function firecrawlError(): MockResponse {
   return {
     ok: false,
@@ -289,6 +302,72 @@ describe("web_fetch extraction fallbacks", () => {
     await expect(
       tool?.execute?.("call", { url: "https://example.com/readability-empty" }),
     ).rejects.toThrow("Readability and Firecrawl returned no content");
+  });
+
+  it("falls back to twitter oembed for status URLs", async () => {
+    installMockFetch((input: RequestInfo | URL) => {
+      const url = requestUrl(input);
+      if (url.includes("publish.twitter.com/oembed")) {
+        return Promise.resolve(
+          twitterOembedResponse(
+            "<blockquote><p>Headless blocked tweet text</p><p>second line</p></blockquote>",
+          ),
+        ) as Promise<Response>;
+      }
+      return Promise.resolve(
+        htmlResponse("<html><body>blocked page</body></html>", url),
+      ) as Promise<Response>;
+    });
+
+    const tool = createFetchTool({
+      firecrawl: { enabled: false },
+    });
+
+    const result = await tool?.execute?.("call", {
+      url: "https://x.com/edenchen/status/2023767680113606990",
+      extractMode: "markdown",
+    });
+    const details = result?.details as { extractor?: string; text?: string; title?: string };
+    expect(details.extractor).toBe("twitter-oembed");
+    expect(details.text).toContain("Headless blocked tweet text");
+    expect(details.title).toContain("Twitter User");
+  });
+
+  it("falls back to publish.x.com oembed when publish.twitter.com fails", async () => {
+    const fetchSpy = installMockFetch((input: RequestInfo | URL) => {
+      const url = requestUrl(input);
+      if (url.includes("publish.x.com/oembed")) {
+        return Promise.resolve(
+          twitterOembedResponse(
+            "<blockquote><p>Fallback tweet text</p><p>second line</p></blockquote>",
+          ),
+        ) as Promise<Response>;
+      }
+      return Promise.resolve(
+        htmlResponse("<html><body>blocked page</body></html>", url),
+      ) as Promise<Response>;
+    });
+
+    const tool = createFetchTool({
+      firecrawl: { enabled: false },
+    });
+
+    const result = await tool?.execute?.("call", {
+      url: "https://x.com/edenchen/status/2023767680113606990",
+      extractMode: "markdown",
+    });
+
+    const details = result?.details as { extractor?: string; text?: string; title?: string };
+    expect(details.extractor).toBe("twitter-oembed");
+    expect(details.text).toContain("Fallback tweet text");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining("publish.twitter.com/oembed"),
+      expect.anything(),
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining("publish.x.com/oembed"),
+      expect.anything(),
+    );
   });
 
   it("uses firecrawl when direct fetch fails", async () => {

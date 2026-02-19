@@ -13,7 +13,6 @@ import {
 } from "../../auto-reply/reply/history.js";
 import { finalizeInboundContext } from "../../auto-reply/reply/inbound-context.js";
 import { createReplyDispatcherWithTyping } from "../../auto-reply/reply/reply-dispatcher.js";
-import type { ReplyPayload } from "../../auto-reply/types.js";
 import { shouldAckReaction as shouldAckReactionGate } from "../../channels/ack-reactions.js";
 import { logTypingFailure, logAckFailure } from "../../channels/logging.js";
 import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
@@ -29,11 +28,9 @@ import { truncateUtf16Safe } from "../../utils.js";
 import { reactMessageDiscord, removeReactionDiscord } from "../send.js";
 import { normalizeDiscordSlug, resolveDiscordOwnerAllowFrom } from "./allow-list.js";
 import { resolveTimestampMs } from "./format.js";
-import type { DiscordMessagePreflightContext } from "./message-handler.preflight.js";
 import {
   buildDiscordMediaPayload,
   resolveDiscordMessageText,
-  resolveForwardedMediaList,
   resolveMediaList,
 } from "./message-utils.js";
 import { buildDirectLabel, buildGuildLabel, resolveReplyContext } from "./reply-context.js";
@@ -612,7 +609,7 @@ export async function processDiscordMessage(ctx: DiscordMessagePreflightContext)
     accountId,
   });
 
-  const typingCallbacks = createTypingCallbacks({
+  const _typingCallbacks = createTypingCallbacks({
     start: () => sendTyping({ client, channelId: typingChannelId }),
     onStartError: (err) => {
       logTypingFailure({
@@ -660,7 +657,7 @@ export async function processDiscordMessage(ctx: DiscordMessagePreflightContext)
     }).onReplyStart,
   });
 
-  const { queuedFinal, counts } = await dispatchInboundMessage({
+  const { queuedFinal: _queuedFinal, counts: _counts } = await dispatchInboundMessage({
     ctx: ctxPayload,
     cfg,
     dispatcher,

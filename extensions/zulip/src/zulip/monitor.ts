@@ -101,17 +101,17 @@ function replaceUploadReferences(
 }
 
 /**
- * Download a Zulip upload to local cache and return the local path.
+ * Download a Zulip upload and return its bytes.
  */
 type ZulipUploadDownloadResult = {
-  localPath: string | null;
+  buffer: Buffer | null;
   tooLarge: boolean;
+  contentType?: string;
 };
 
 async function downloadZulipUpload(
   client: ZulipClient,
   uploadPath: string,
-  fileName: string,
   maxBytes: number,
 ): Promise<ZulipUploadDownloadResult> {
   try {
@@ -121,13 +121,13 @@ async function downloadZulipUpload(
     });
     if (!res.ok) {
       console.error(`[zulip] Failed to download ${uploadPath}: ${res.status}`);
-      return { localPath: null, tooLarge: false };
+      return { buffer: null, tooLarge: false };
     }
 
     const contentLengthHeader = res.headers.get("content-length");
     const contentLength = contentLengthHeader ? Number.parseInt(contentLengthHeader, 10) : NaN;
     if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-      return { localPath: null, tooLarge: true };
+      return { buffer: null, tooLarge: true };
     }
 
     let totalBytes = 0;
@@ -144,30 +144,23 @@ async function downloadZulipUpload(
         }
         totalBytes += value.byteLength;
         if (totalBytes > maxBytes) {
-          return { localPath: null, tooLarge: true };
+          return { buffer: null, tooLarge: true };
         }
         chunks.push(Buffer.from(value));
       }
     } else {
       const buffer = Buffer.from(await res.arrayBuffer());
       if (buffer.length > maxBytes) {
-        return { localPath: null, tooLarge: true };
+        return { buffer: null, tooLarge: true };
       }
       chunks.push(buffer);
     }
     const buffer = Buffer.concat(chunks);
-
-    // Create unique filename based on upload path hash
-    const hash = uploadPath.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 50);
-    const ext = path.extname(fileName) || ".bin";
-    const localName = `${Date.now()}_${hash}${ext}`;
-    const localPath = path.join(ZULIP_UPLOAD_CACHE_DIR, localName);
-
-    fs.writeFileSync(localPath, buffer);
-    return { localPath, tooLarge: false };
+    const contentType = res.headers.get("content-type")?.split(";")[0]?.trim();
+    return { buffer, tooLarge: false, contentType };
   } catch (err) {
     console.error(`[zulip] Error downloading ${uploadPath}: ${String(err)}`);
-    return { localPath: null, tooLarge: false };
+    return { buffer: null, tooLarge: false };
   }
 }
 
@@ -219,48 +212,73 @@ function isTextFile(fileName: string): boolean {
  * Text files are read and inlined directly into the prompt.
  * Binary/image files get paths noted for tool-based access.
  */
-async function processZulipUploads(
+export async function processZulipUploads(
   client: ZulipClient,
   content: string,
   maxBytes: number,
-): Promise<{ attachmentInfo: string; strippedContent: string }> {
+  saveMedia: (params: {
+    buffer: Buffer;
+    contentType: string | undefined;
+    fileName: string;
+  }) => Promise<{ path: string; contentType?: string } | null>,
+): Promise<{
+  attachmentInfo: string;
+  strippedContent: string;
+  mediaPaths: string[];
+  mediaTypes: string[];
+}> {
   const uploads = extractZulipUploadUrls(content);
   if (uploads.length === 0) {
-    return { attachmentInfo: "", strippedContent: content };
+    return { attachmentInfo: "", strippedContent: content, mediaPaths: [], mediaTypes: [] };
   }
 
   const attachmentLines: string[] = [];
   let strippedContent = content;
+  const mediaPaths: string[] = [];
+  const mediaTypes: string[] = [];
 
   for (const upload of uploads) {
-    const download = await downloadZulipUpload(client, upload.path, upload.name, maxBytes);
-    const localPath = download.localPath;
-    if (localPath) {
-      // Inline text file content directly so the agent can see it without tools
+    const download = await downloadZulipUpload(client, upload.path, maxBytes);
+    const downloaded = download.buffer;
+    if (downloaded) {
       if (isTextFile(upload.name)) {
-        try {
-          const stat = fs.statSync(localPath);
-          if (stat.size <= MAX_INLINE_TEXT_BYTES) {
-            const text = fs.readFileSync(localPath, "utf-8");
+        if (downloaded.length <= MAX_INLINE_TEXT_BYTES) {
+          try {
+            const text = downloaded.toString("utf-8");
             attachmentLines.push(`📎 File "${upload.name}":\n\`\`\`\n${text}\n\`\`\``);
-          } else {
-            attachmentLines.push(
-              `📎 File "${upload.name}" (${Math.round(stat.size / 1024)} KB — too large to inline): ${localPath}`,
-            );
+          } catch {
+            attachmentLines.push(`📎 File "${upload.name}": ${downloaded.length} bytes`);
           }
-        } catch {
-          attachmentLines.push(`📎 Attachment "${upload.name}": ${localPath}`);
+        } else {
+          attachmentLines.push(
+            `📎 File "${upload.name}" (${Math.round(downloaded.length / 1024)} KB — too large to inline)`,
+          );
         }
       } else {
-        attachmentLines.push(`📎 Attachment "${upload.name}": ${localPath}`);
+        attachmentLines.push(`📎 Attachment "${upload.name}": prepared for model analysis`);
+        const saved = await saveMedia({
+          buffer: downloaded,
+          contentType: download.contentType,
+          fileName: upload.name,
+        }).catch(() => null);
+        if (saved) {
+          mediaPaths.push(saved.path);
+          if (saved.contentType) {
+            mediaTypes.push(saved.contentType);
+          }
+        } else {
+          attachmentLines.push(
+            `📎 Attachment "${upload.name}": (downloaded but failed to cache for analysis)`,
+          );
+        }
       }
+
       strippedContent = replaceUploadReferences(
         strippedContent,
         upload,
         `[attached: ${upload.name}]`,
       );
     } else {
-      // Download failed — strip the raw URL and note the failure so the agent doesn't try to fetch it
       if (download.tooLarge) {
         attachmentLines.push(
           `📎 File "${upload.name}": (download skipped — exceeds ${Math.round(maxBytes / 1024 / 1024)} MB limit)`,
@@ -287,6 +305,8 @@ async function processZulipUploads(
     attachmentInfo:
       attachmentLines.length > 0 ? `\n[Attached files]\n${attachmentLines.join("\n")}` : "",
     strippedContent,
+    mediaPaths,
+    mediaTypes,
   };
 }
 
@@ -1825,11 +1845,20 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
         )
       : null;
 
-    // Download any Zulip uploads (images, files) and get local paths
-    const { attachmentInfo, strippedContent } = await processZulipUploads(
+    // Download any Zulip uploads (images, files) and get media paths
+    const { attachmentInfo, strippedContent, mediaPaths, mediaTypes } = await processZulipUploads(
       client,
       rawText,
       mediaMaxBytes,
+      async ({ buffer, contentType, fileName }) => {
+        return core.channel.media.saveMediaBuffer(
+          buffer,
+          contentType,
+          "inbound",
+          mediaMaxBytes,
+          fileName,
+        );
+      },
     );
     // Apply the same bot-mention stripping to the stripped content (upload URLs removed)
     const cleanStripped = strippedContent.replace(botMentionRegex, "").replace(/\s+/g, " ").trim();
@@ -2084,6 +2113,12 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
       GroupChannel: kind !== "dm" ? `#${sName}` : undefined,
       SenderName: senderName,
       SenderId: String(senderId),
+      MediaPath: mediaPaths[0],
+      MediaPaths: mediaPaths.length > 0 ? mediaPaths : undefined,
+      MediaType: mediaTypes[0],
+      MediaTypes: mediaTypes.length > 0 ? mediaTypes : undefined,
+      MediaUrl: mediaPaths[0],
+      MediaUrls: mediaPaths.length > 0 ? mediaPaths : undefined,
       Provider: "zulip" as const,
       Surface: "zulip" as const,
       MessageSid: String(msg.id),
@@ -2095,7 +2130,6 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
       OriginatingChannel: "zulip" as const,
       OriginatingTo: to,
     });
-
     if (kind === "dm") {
       await core.channel.session.updateLastRoute({
         storePath,

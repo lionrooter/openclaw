@@ -75,4 +75,89 @@ describe("resolveMessagingTarget (directory fallback)", () => {
     expect(mocks.listGroups).not.toHaveBeenCalled();
     expect(mocks.listGroupsLive).not.toHaveBeenCalled();
   });
+
+  it("treats Zulip shorthand stream:topic target as a direct target", async () => {
+    const rawInput = "04:computer: coding-loop";
+    mocks.getChannelPlugin.mockImplementation((channelId: string) => {
+      if (channelId !== "zulip") {
+        return {
+          directory: {
+            listGroups: mocks.listGroups,
+            listGroupsLive: mocks.listGroupsLive,
+          },
+        } as never;
+      }
+      return {
+        messaging: {
+          targetResolver: {
+            looksLikeId: (raw) => {
+              const trimmed = raw.trim();
+              if (/^(stream:|dm:)/i.test(trimmed)) {
+                return true;
+              }
+              const lastColon = trimmed.lastIndexOf(":");
+              return lastColon > 0 && lastColon < trimmed.length - 1;
+            },
+          },
+        },
+        directory: {
+          listGroups: mocks.listGroups,
+          listGroupsLive: mocks.listGroupsLive,
+        },
+      } as never;
+    });
+
+    const result = await resolveMessagingTarget({
+      cfg,
+      channel: "zulip",
+      input: rawInput,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.target.source).toBe("normalized");
+      expect(result.target.to).toBe(rawInput);
+    }
+    expect(mocks.listGroups).not.toHaveBeenCalled();
+    expect(mocks.listGroupsLive).not.toHaveBeenCalled();
+  });
+
+  it("classifies Zulip dm targets as user kind", async () => {
+    mocks.getChannelPlugin.mockImplementation((channelId: string) => {
+      if (channelId !== "zulip") {
+        return {
+          directory: {
+            listGroups: mocks.listGroups,
+            listGroupsLive: mocks.listGroupsLive,
+          },
+        } as never;
+      }
+      return {
+        messaging: {
+          targetResolver: {
+            looksLikeId: (raw: string) => /^(stream:|dm:)/i.test(raw.trim()),
+          },
+        },
+        directory: {
+          listGroups: mocks.listGroups,
+          listGroupsLive: mocks.listGroupsLive,
+        },
+      } as never;
+    });
+
+    const result = await resolveMessagingTarget({
+      cfg,
+      channel: "zulip",
+      input: "dm:12345",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.target.kind).toBe("user");
+      expect(result.target.to).toBe("dm:12345");
+      expect(result.target.source).toBe("normalized");
+    }
+    expect(mocks.listGroups).not.toHaveBeenCalled();
+    expect(mocks.listGroupsLive).not.toHaveBeenCalled();
+  });
 });

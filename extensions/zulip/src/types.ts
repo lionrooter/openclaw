@@ -1,4 +1,10 @@
-import type { BlockStreamingCoalesceConfig, DmPolicy, GroupPolicy } from "openclaw/plugin-sdk";
+import type {
+  BlockStreamingCoalesceConfig,
+  DmPolicy,
+  GroupPolicy,
+  GroupToolPolicyBySenderConfig,
+  GroupToolPolicyConfig,
+} from "openclaw/plugin-sdk";
 
 export type ZulipTopicConfig = {
   /** Number of recent topic messages to include on first turn. Default: 20. */
@@ -32,6 +38,11 @@ export type ZulipXCaseRouteConfig = {
    * Example: "exdi" to post as the Exdi bot.
    */
   postAsAccountId?: string;
+};
+
+export type ZulipGroupConfig = {
+  tools?: GroupToolPolicyConfig;
+  toolsBySender?: GroupToolPolicyBySenderConfig;
 };
 
 export type ZulipXCaseConfig = {
@@ -106,6 +117,8 @@ export type ZulipAccountConfig = {
   blockStreaming?: boolean;
   /** Merge streamed block replies before sending. */
   blockStreamingCoalesce?: BlockStreamingCoalesceConfig;
+  /** Per-DM DM policy overrides by Zulip sender key. */
+  groups?: Record<string, ZulipGroupConfig>;
   /** Topic/thread behavior for stream messages. */
   topic?: ZulipTopicConfig;
   /** Per-stream overrides keyed by stream name. */

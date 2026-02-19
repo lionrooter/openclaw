@@ -37,4 +37,23 @@ describe("probeIMessage", () => {
     expect(result.error).toMatch(/rpc/i);
     expect(createIMessageRpcClientMock).not.toHaveBeenCalled();
   });
+
+  it("marks authorization denied as fatal", async () => {
+    createIMessageRpcClientMock.mockResolvedValue({
+      request: vi.fn(async () => {
+        throw new Error(
+          'imsg rpc: failed to parse permissionDenied(path: "/Users/me/Library/Messages/chat.db", underlying: authorization denied (code: 23))',
+        );
+      }),
+      stop: vi.fn(async () => {}),
+      start: vi.fn(async () => {}),
+      waitForClose: vi.fn(async () => {}),
+    } as unknown as ReturnType<typeof spawn>);
+
+    const result = await probeIMessage(1000, { cliPath: "imsg" });
+    expect(result.ok).toBe(false);
+    expect(result.fatal).toBe(true);
+    expect(result.error).toMatch(/authorization denied/i);
+    expect(createIMessageRpcClientMock).toHaveBeenCalledTimes(1);
+  });
 });
