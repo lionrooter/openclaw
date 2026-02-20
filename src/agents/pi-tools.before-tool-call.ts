@@ -3,6 +3,7 @@ import type { SessionState } from "../logging/diagnostic-session-state.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import { isPlainObject } from "../utils.js";
+import type { AnyAgentTool } from "./pi-tools.types.js";
 import { normalizeToolName } from "./tool-policy.js";
 import { evaluateWorkflowLaneGuard } from "./workflow-lane-policy.js";
 

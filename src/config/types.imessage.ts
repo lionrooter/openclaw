@@ -3,6 +3,7 @@ import type {
   DmPolicy,
   GroupPolicy,
   MarkdownConfig,
+  ReplyToMode,
 } from "./types.base.js";
 import type { ChannelHeartbeatVisibilityConfig } from "./types.channels.js";
 import type { DmConfig } from "./types.messages.js";
@@ -63,6 +64,8 @@ export type IMessageAccountConfig = {
   /** Chunking mode: "length" (default) splits by size; "newline" splits on every newline. */
   chunkMode?: "length" | "newline";
   blockStreaming?: boolean;
+  /** Reply threading mode: off (default), first, or all. */
+  replyToMode?: ReplyToMode;
   /** Merge streamed block replies before sending. */
   blockStreamingCoalesce?: BlockStreamingCoalesceConfig;
   groups?: Record<

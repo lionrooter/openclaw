@@ -398,6 +398,8 @@ export type ToolsConfig = {
   deny?: string[];
   /** Optional tool policy overrides keyed by provider id or "provider/model". */
   byProvider?: Record<string, ToolPolicyConfig>;
+  /** Runtime loop detection for repetitive/stuck tool-call patterns. */
+  loopDetection?: ToolLoopDetectionConfig;
   web?: {
     search?: {
       /** Enable web search tool (default: true when API key is present). */

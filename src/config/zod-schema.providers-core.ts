@@ -831,6 +831,7 @@ export const IMessageAccountSchemaBase = z
     chunkMode: z.enum(["length", "newline"]).optional(),
     blockStreaming: z.boolean().optional(),
     blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
+    replyToMode: ReplyToModeSchema.optional(),
     groups: z
       .record(
         z.string(),

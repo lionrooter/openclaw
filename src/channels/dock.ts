@@ -480,6 +480,7 @@ const DOCKS: Record<ChatChannelId, ChannelDock> = {
       resolveToolPolicy: resolveIMessageGroupToolPolicy,
     },
     threading: {
+      resolveReplyToMode: ({ cfg }) => cfg.channels?.imessage?.replyToMode ?? "off",
       buildToolContext: ({ context, hasRepliedRef }) =>
         buildIMessageThreadToolContext({ context, hasRepliedRef }),
     },
