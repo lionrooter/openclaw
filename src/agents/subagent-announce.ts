@@ -1224,7 +1224,7 @@ export async function runSubagentAnnounceFlow(params: {
       startedAt: params.startedAt,
       endedAt: params.endedAt,
     });
-    completionMessage = buildCompletionDeliveryMessage({
+    let completionMessage = buildCompletionDeliveryMessage({
       findings,
       subagentName,
       spawnMode: params.spawnMode,
