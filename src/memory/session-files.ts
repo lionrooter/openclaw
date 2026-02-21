@@ -16,6 +16,8 @@ export type SessionFileEntry = {
   content: string;
   /** Maps each content line (0-indexed) to its 1-indexed JSONL source line. */
   lineMap: number[];
+  /** Optional loop ID parsed from session metadata for memory traceability. */
+  loopId?: string;
 };
 
 export async function listSessionFilesForAgent(agentId: string): Promise<string[]> {
@@ -43,7 +45,59 @@ function normalizeSessionText(value: string): string {
     .trim();
 }
 
-export function extractSessionText(content: unknown): string | null {
+const LOOP_ID_KEYS = new Set(["loopId", "loop_id", "loop-id"]);
+
+function normalizeLoopId(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function extractLoopIdFromRecordValue(value: unknown, depth = 0): string | undefined {
+  if (depth >= 3 || value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    return normalizeLoopId(value);
+  }
+  if (typeof value !== "object") {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = extractLoopIdFromRecordValue(item, depth + 1);
+      if (nested) {
+        return nested;
+      }
+    }
+    return undefined;
+  }
+
+  const obj = value as Record<string, unknown>;
+  for (const [key, candidateValue] of Object.entries(obj)) {
+    if (LOOP_ID_KEYS.has(key)) {
+      const candidate = normalizeLoopId(candidateValue);
+      if (candidate) {
+        return candidate;
+      }
+    }
+  }
+
+  for (const child of Object.values(obj)) {
+    if (child !== null && typeof child === "object") {
+      const nested = extractLoopIdFromRecordValue(child, depth + 1);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function extractSessionText(content: unknown): string | null {
   if (typeof content === "string") {
     const normalized = normalizeSessionText(content);
     return normalized ? normalized : null;
@@ -78,6 +132,7 @@ export async function buildSessionEntry(absPath: string): Promise<SessionFileEnt
     const lines = raw.split("\n");
     const collected: string[] = [];
     const lineMap: number[] = [];
+    let loopId: string | undefined;
     for (let jsonlIdx = 0; jsonlIdx < lines.length; jsonlIdx++) {
       const line = lines[jsonlIdx];
       if (!line.trim()) {
@@ -89,11 +144,15 @@ export async function buildSessionEntry(absPath: string): Promise<SessionFileEnt
       } catch {
         continue;
       }
-      if (
-        !record ||
-        typeof record !== "object" ||
-        (record as { type?: unknown }).type !== "message"
-      ) {
+      if (!record || typeof record !== "object") {
+        continue;
+      }
+
+      if (loopId === undefined) {
+        loopId = extractLoopIdFromRecordValue(record);
+      }
+
+      if ((record as { type?: unknown }).type !== "message") {
         continue;
       }
       const message = (record as { message?: unknown }).message as
@@ -123,6 +182,7 @@ export async function buildSessionEntry(absPath: string): Promise<SessionFileEnt
       hash: hashText(content + "\n" + lineMap.join(",")),
       content,
       lineMap,
+      loopId,
     };
   } catch (err) {
     log.debug(`Failed reading session file ${absPath}: ${String(err)}`);

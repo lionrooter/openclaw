@@ -348,6 +348,9 @@ describe("classifyFailoverReason", () => {
       "rate_limit",
     );
   });
+  it("classifies Claude CLI rate limit message as rate_limit", () => {
+    expect(classifyFailoverReason("You've hit your limit - resets 10am")).toBe("rate_limit");
+  });
   it("classifies provider high-demand / service-unavailable messages as rate_limit", () => {
     expect(
       classifyFailoverReason(

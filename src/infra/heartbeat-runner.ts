@@ -97,6 +97,78 @@ export type HeartbeatSummary = {
 };
 
 const DEFAULT_HEARTBEAT_TARGET = "last";
+const HEARTBEAT_ACTIVE_LOOP_FILE = "active-loop.txt";
+
+function normalizeLoopId(value?: string | null): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function extractLoopIdFromText(value?: string | null): string | undefined {
+  const text = normalizeLoopId(value);
+  if (!text) {
+    return undefined;
+  }
+
+  const patterns = [
+    /(?:^|[^a-z0-9_-])loop-id[:=]([a-zA-Z0-9_-]+)/i,
+    /(?:^|[^a-z0-9_-])loop_id[:=]([a-zA-Z0-9_-]+)/i,
+    /(?:^|[^a-z0-9_-])loopId[:=]([a-zA-Z0-9_-]+)/i,
+    /(?:^|[^a-zA-Z0-9_-])loop:([a-zA-Z0-9_-]+)/i,
+    /\bloop[:=-]([a-zA-Z0-9_-]+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) {
+      return match[1].trim();
+    }
+  }
+  return undefined;
+}
+
+async function persistHeartbeatLoopId(params: {
+  cfg: OpenClawConfig;
+  agentId: string;
+  loopId: string;
+}) {
+  const workspaceDir = resolveAgentWorkspaceDir(params.cfg, params.agentId);
+  if (!workspaceDir) {
+    return;
+  }
+  const markerPath = path.join(workspaceDir, HEARTBEAT_ACTIVE_LOOP_FILE);
+  const payload = `${params.loopId}\n${Date.now()}`;
+  try {
+    await fs.writeFile(markerPath, payload, "utf-8");
+  } catch {
+    // Best-effort: marker file is optional and used for loop metadata only.
+  }
+}
+
+function resolveHeartbeatLoopId(params: {
+  reason?: string;
+  pendingEventEntries: ReturnType<typeof peekSystemEventEntries>;
+}): string | undefined {
+  const fromReason = extractLoopIdFromText(params.reason);
+  if (fromReason) {
+    return fromReason;
+  }
+
+  for (const event of params.pendingEventEntries) {
+    const fromContext = extractLoopIdFromText(event.contextKey);
+    if (fromContext) {
+      return fromContext;
+    }
+    const fromText = extractLoopIdFromText(event.text);
+    if (fromText) {
+      return fromText;
+    }
+  }
+
+  return undefined;
+}
 
 // Prompt used when an async exec has completed and the result should be relayed to the user.
 // This overrides the standard heartbeat prompt to ensure the model responds with the exec result
@@ -609,6 +681,17 @@ export async function runHeartbeatOnce(opts: {
     return { status: "skipped", reason: preflight.skipReason };
   }
   const { entry, sessionKey, storePath } = preflight.session;
+  const heartbeatLoopId = resolveHeartbeatLoopId({
+    reason: opts.reason,
+    pendingEventEntries: preflight.pendingEventEntries,
+  });
+  if (heartbeatLoopId) {
+    await persistHeartbeatLoopId({
+      cfg,
+      agentId,
+      loopId: heartbeatLoopId,
+    });
+  }
   const { isCronEventReason, pendingEventEntries } = preflight;
   const previousUpdatedAt = entry?.updatedAt;
   const delivery = resolveHeartbeatDeliveryTarget({ cfg, entry, heartbeat });

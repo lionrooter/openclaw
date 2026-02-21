@@ -55,6 +55,34 @@ describe("buildSessionEntry", () => {
     expect(entry!.lineMap).toEqual([4, 6, 7]);
   });
 
+  it("extracts loopId from session metadata", async () => {
+    const jsonlLines = [
+      JSON.stringify({ type: "session-meta", loopId: "loop-session-xyz" }),
+      JSON.stringify({ type: "message", message: { role: "user", content: "Hello from loop" } }),
+    ];
+    const filePath = path.join(tmpDir, "loop-id-session.jsonl");
+    await fs.writeFile(filePath, jsonlLines.join("\n"));
+
+    const entry = await buildSessionEntry(filePath);
+    expect(entry).not.toBeNull();
+    expect(entry!.loopId).toBe("loop-session-xyz");
+    expect(entry!.content).toContain("User: Hello from loop");
+  });
+
+  it("extracts loopId from nested metadata data", async () => {
+    const jsonlLines = [
+      JSON.stringify({ type: "session-meta", data: { loop_id: "loop-nested-abc" } }),
+      JSON.stringify({ type: "message", message: { role: "user", content: "Hello again" } }),
+    ];
+    const filePath = path.join(tmpDir, "nested-loop-id-session.jsonl");
+    await fs.writeFile(filePath, jsonlLines.join("\n"));
+
+    const entry = await buildSessionEntry(filePath);
+    expect(entry).not.toBeNull();
+    expect(entry!.loopId).toBe("loop-nested-abc");
+    expect(entry!.content).toContain("User: Hello again");
+  });
+
   it("returns empty lineMap when no messages are found", async () => {
     const jsonlLines = [
       JSON.stringify({ type: "custom", customType: "model-snapshot", data: {} }),

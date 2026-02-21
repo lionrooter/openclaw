@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import chokidar, { FSWatcher } from "chokidar";
-import { resolveAgentDir } from "../agents/agent-scope.js";
+import { resolveAgentDir, resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import { ResolvedMemorySearchConfig } from "../agents/memory-search.js";
 import { type OpenClawConfig } from "../config/config.js";
 import { resolveSessionTranscriptsDirForAgent } from "../config/sessions/paths.js";
@@ -67,6 +67,7 @@ const FTS_TABLE = "chunks_fts";
 const EMBEDDING_CACHE_TABLE = "embedding_cache";
 const SESSION_DIRTY_DEBOUNCE_MS = 5000;
 const SESSION_DELTA_READ_CHUNK_BYTES = 64 * 1024;
+const HEARTBEAT_ACTIVE_LOOP_FILE = "active-loop.txt";
 const VECTOR_LOAD_TIMEOUT_MS = 30_000;
 const IGNORED_MEMORY_WATCH_DIR_NAMES = new Set([
   ".git",
@@ -79,6 +80,24 @@ const IGNORED_MEMORY_WATCH_DIR_NAMES = new Set([
 ]);
 
 const log = createSubsystemLogger("memory");
+
+async function resolveActiveLoopId(
+  cfg: OpenClawConfig,
+  agentId: string,
+): Promise<string | undefined> {
+  const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+  if (!workspaceDir) {
+    return undefined;
+  }
+  const markerPath = path.join(workspaceDir, HEARTBEAT_ACTIVE_LOOP_FILE);
+  try {
+    const raw = await fs.readFile(markerPath, "utf-8");
+    const loopId = raw.split(/[\r\n]+/)[0]?.trim();
+    return loopId && loopId.length > 0 ? loopId : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function shouldIgnoreMemoryWatchPath(watchPath: string): boolean {
   const normalized = path.normalize(watchPath);
@@ -762,6 +781,8 @@ export abstract class MemoryManagerSyncOps {
       });
     }
 
+    const activeLoopId = await resolveActiveLoopId(this.cfg, this.agentId);
+
     const tasks = files.map((absPath) => async () => {
       if (!indexAll && !this.sessionsDirtyFiles.has(absPath)) {
         if (params.progress) {
@@ -784,6 +805,7 @@ export abstract class MemoryManagerSyncOps {
         }
         return;
       }
+      const resolvedLoopId = entry.loopId ?? activeLoopId;
       const record = this.db
         .prepare(`SELECT hash FROM files WHERE path = ? AND source = ?`)
         .get(entry.path, "sessions") as { hash: string } | undefined;
@@ -808,6 +830,7 @@ export abstract class MemoryManagerSyncOps {
           agentId: this.agentId,
           sessionFile: absPath,
           sessionContent: entry.content,
+          loopId: resolvedLoopId,
         });
       } catch (err) {
         log.debug(`Episode extraction skipped: ${String(err)}`);
@@ -820,6 +843,7 @@ export abstract class MemoryManagerSyncOps {
           sessionContent: entry.content,
           sessionFile: absPath,
           workspaceDir: this.workspaceDir,
+          loopId: resolvedLoopId,
         });
         if (factResult.extracted > 0) {
           log.debug(`Extracted ${factResult.extracted} facts from session`, {
