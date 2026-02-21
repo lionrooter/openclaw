@@ -692,7 +692,7 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
 
   protected async indexFile(
     entry: MemoryFileEntry | SessionFileEntry,
-    options: { source: MemorySource; content?: string },
+    options: { source: MemorySource; content?: string; loopId?: string },
   ) {
     // FTS-only mode: skip indexing if no provider
     if (!this.provider) {

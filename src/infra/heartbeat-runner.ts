@@ -96,6 +96,7 @@ export type HeartbeatSummary = {
 };
 
 const DEFAULT_HEARTBEAT_TARGET = "last";
+const HEARTBEAT_ACTIVE_LOOP_FILE = "active-loop.txt";
 
 // Prompt used when an async exec has completed and the result should be relayed to the user.
 // This overrides the standard heartbeat prompt to ensure the model responds with the exec result
@@ -118,6 +119,8 @@ export type HeartbeatRunner = {
   stop: () => void;
   updateConfig: (cfg: OpenClawConfig) => void;
 };
+
+type HeartbeatLoopId = string;
 
 function hasExplicitHeartbeatAgents(cfg: OpenClawConfig) {
   const list = cfg.agents?.list ?? [];
@@ -491,6 +494,58 @@ type HeartbeatPreflight = HeartbeatReasonFlags & {
   skipReason?: HeartbeatSkipReason;
 };
 
+function normalizeHeartbeatLoopId(raw: unknown): HeartbeatLoopId | undefined {
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function resolveHeartbeatLoopId(params: {
+  loopId?: string;
+  reason?: string;
+}): HeartbeatLoopId | undefined {
+  if (typeof params.loopId === "string") {
+    const explicit = normalizeHeartbeatLoopId(params.loopId);
+    if (explicit) {
+      return explicit;
+    }
+  }
+  const normalizedReason = normalizeHeartbeatLoopId(params.reason);
+  if (!normalizedReason) {
+    return undefined;
+  }
+  const match = normalizedReason.match(/^\s*loop(?:-|_|:)?(?:id)?\s*[:=]\s*(.+)$/i);
+  if (match?.[1]) {
+    return normalizeHeartbeatLoopId(match[1]);
+  }
+  return undefined;
+}
+
+async function updateHeartbeatActiveLoopMarker(params: {
+  cfg: OpenClawConfig;
+  agentId: string;
+  loopId?: HeartbeatLoopId;
+}) {
+  const workspaceDir = resolveAgentWorkspaceDir(params.cfg, params.agentId);
+  const markerPath = path.join(workspaceDir, HEARTBEAT_ACTIVE_LOOP_FILE);
+  if (!params.loopId) {
+    try {
+      await fs.unlink(markerPath);
+    } catch {
+      // Marker is optional and should remain absent for non-loop heartbeat runs.
+    }
+    return;
+  }
+  try {
+    await fs.mkdir(workspaceDir, { recursive: true });
+    await fs.writeFile(markerPath, `${params.loopId}\n`, "utf-8");
+  } catch {
+    // Marker is best-effort; failure should not block heartbeats.
+  }
+}
+
 function resolveHeartbeatReasonFlags(reason?: string): HeartbeatReasonFlags {
   const reasonKind = resolveHeartbeatReasonKind(reason);
   return {
@@ -566,11 +621,13 @@ export async function runHeartbeatOnce(opts: {
   sessionKey?: string;
   heartbeat?: HeartbeatConfig;
   reason?: string;
+  loopId?: string;
   deps?: HeartbeatDeps;
 }): Promise<HeartbeatRunResult> {
   const cfg = opts.cfg ?? loadConfig();
   const agentId = normalizeAgentId(opts.agentId ?? resolveDefaultAgentId(cfg));
   const heartbeat = opts.heartbeat ?? resolveHeartbeatConfig(cfg, agentId);
+  const loopId = resolveHeartbeatLoopId({ loopId: opts.loopId, reason: opts.reason });
   if (!heartbeatsEnabled) {
     return { status: "skipped", reason: "disabled" };
   }
@@ -590,6 +647,8 @@ export async function runHeartbeatOnce(opts: {
   if (queueSize > 0) {
     return { status: "skipped", reason: "requests-in-flight" };
   }
+
+  await updateHeartbeatActiveLoopMarker({ cfg, agentId, loopId });
 
   // Preflight centralizes trigger classification, event inspection, and HEARTBEAT.md gating.
   const preflight = await resolveHeartbeatPreflight({
@@ -1101,6 +1160,7 @@ export function startHeartbeatRunner(opts: {
           agentId: targetAgent.agentId,
           heartbeat: targetAgent.heartbeat,
           reason,
+          loopId: params.loopId,
           sessionKey: requestedSessionKey,
           deps: { runtime: state.runtime },
         });
@@ -1132,6 +1192,7 @@ export function startHeartbeatRunner(opts: {
           agentId: agent.agentId,
           heartbeat: agent.heartbeat,
           reason,
+          loopId: params.loopId,
           deps: { runtime: state.runtime },
         });
       } catch (err) {

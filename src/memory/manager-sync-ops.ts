@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import chokidar, { FSWatcher } from "chokidar";
-import { resolveAgentDir } from "../agents/agent-scope.js";
+import { resolveAgentDir, resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import { ResolvedMemorySearchConfig } from "../agents/memory-search.js";
 import { type OpenClawConfig } from "../config/config.js";
 import { resolveSessionTranscriptsDirForAgent } from "../config/sessions/paths.js";
@@ -63,6 +63,7 @@ const FTS_TABLE = "chunks_fts";
 const EMBEDDING_CACHE_TABLE = "embedding_cache";
 const SESSION_DIRTY_DEBOUNCE_MS = 5000;
 const SESSION_DELTA_READ_CHUNK_BYTES = 64 * 1024;
+const HEARTBEAT_ACTIVE_LOOP_FILE = "active-loop.txt";
 const VECTOR_LOAD_TIMEOUT_MS = 30_000;
 const IGNORED_MEMORY_WATCH_DIR_NAMES = new Set([
   ".git",
@@ -80,6 +81,21 @@ function shouldIgnoreMemoryWatchPath(watchPath: string): boolean {
   const normalized = path.normalize(watchPath);
   const parts = normalized.split(path.sep).map((segment) => segment.trim().toLowerCase());
   return parts.some((segment) => IGNORED_MEMORY_WATCH_DIR_NAMES.has(segment));
+}
+
+async function resolveActiveLoopId(params: {
+  cfg: OpenClawConfig;
+  agentId: string;
+}): Promise<string | undefined> {
+  try {
+    const workspaceDir = resolveAgentWorkspaceDir(params.cfg, params.agentId);
+    const loopIdPath = path.join(workspaceDir, HEARTBEAT_ACTIVE_LOOP_FILE);
+    const raw = await fs.readFile(loopIdPath, "utf-8");
+    const loopId = raw.split(/\r?\n/)[0]?.trim();
+    return loopId?.length ? loopId : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export abstract class MemoryManagerSyncOps {
@@ -147,7 +163,7 @@ export abstract class MemoryManagerSyncOps {
   protected abstract pruneEmbeddingCacheIfNeeded(): void;
   protected abstract indexFile(
     entry: MemoryFileEntry | SessionFileEntry,
-    options: { source: MemorySource; content?: string },
+    options: { source: MemorySource; content?: string; loopId?: string },
   ): Promise<void>;
 
   protected async ensureVectorReady(dimensions?: number): Promise<boolean> {
@@ -715,6 +731,7 @@ export abstract class MemoryManagerSyncOps {
     }
 
     const files = await listSessionFilesForAgent(this.agentId);
+    const activeLoopId = await resolveActiveLoopId({ cfg: this.cfg, agentId: this.agentId });
     const activePaths = new Set(files.map((file) => sessionPathForFile(file)));
     const indexAll = params.needsFullReindex || this.sessionsDirtyFiles.size === 0;
     log.debug("memory sync: indexing session files", {
@@ -769,7 +786,12 @@ export abstract class MemoryManagerSyncOps {
         this.resetSessionDelta(absPath, entry.size);
         return;
       }
-      await this.indexFile(entry, { source: "sessions", content: entry.content });
+      const resolvedLoopId = entry.loopId ?? activeLoopId;
+      await this.indexFile(entry, {
+        source: "sessions",
+        content: entry.content,
+        ...(resolvedLoopId ? { loopId: resolvedLoopId } : {}),
+      });
       this.resetSessionDelta(absPath, entry.size);
       if (params.progress) {
         params.progress.completed += 1;

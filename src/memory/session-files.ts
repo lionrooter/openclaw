@@ -14,10 +14,64 @@ export type SessionFileEntry = {
   size: number;
   hash: string;
   content: string;
+  loopId?: string;
   /** Maps each content line (0-indexed) to its 1-indexed JSONL source line. */
   lineMap: number[];
 };
 
+const LOOP_ID_KEYS = new Set(["loopid", "loop-id", "loop_id", "loopId"]);
+
+function normalizeLoopId(raw: unknown): string | undefined {
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function extractLoopIdFromRecordValue(value: unknown, depth = 0): string | undefined {
+  if (depth > 3) {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (item && typeof item === "object") {
+        const nested = extractLoopIdFromRecordValue(item, depth + 1);
+        if (nested) {
+          return nested;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const [key, entryValue] of Object.entries(record)) {
+    if (LOOP_ID_KEYS.has(key.toLowerCase())) {
+      const nested = normalizeLoopId(entryValue);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  for (const entryValue of Object.values(record)) {
+    if (!entryValue || typeof entryValue !== "object") {
+      continue;
+    }
+    const nested = extractLoopIdFromRecordValue(entryValue, depth + 1);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return undefined;
+}
 export async function listSessionFilesForAgent(agentId: string): Promise<string[]> {
   const dir = resolveSessionTranscriptsDirForAgent(agentId);
   try {
@@ -78,6 +132,7 @@ export async function buildSessionEntry(absPath: string): Promise<SessionFileEnt
     const lines = raw.split("\n");
     const collected: string[] = [];
     const lineMap: number[] = [];
+    let loopId: string | undefined;
     for (let jsonlIdx = 0; jsonlIdx < lines.length; jsonlIdx++) {
       const line = lines[jsonlIdx];
       if (!line.trim()) {
@@ -94,6 +149,10 @@ export async function buildSessionEntry(absPath: string): Promise<SessionFileEnt
         typeof record !== "object" ||
         (record as { type?: unknown }).type !== "message"
       ) {
+        const recordLoopId = extractLoopIdFromRecordValue(record);
+        if (!loopId && recordLoopId) {
+          loopId = recordLoopId;
+        }
         continue;
       }
       const message = (record as { message?: unknown }).message as
@@ -121,6 +180,7 @@ export async function buildSessionEntry(absPath: string): Promise<SessionFileEnt
       mtimeMs: stat.mtimeMs,
       size: stat.size,
       hash: hashText(content + "\n" + lineMap.join(",")),
+      loopId,
       content,
       lineMap,
     };

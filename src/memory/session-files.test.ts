@@ -84,4 +84,32 @@ describe("buildSessionEntry", () => {
     expect(entry).not.toBeNull();
     expect(entry!.lineMap).toEqual([3, 5]);
   });
+
+  it("extracts loopId from top-level metadata", async () => {
+    const jsonlLines = [
+      JSON.stringify({ type: "session-meta", loopId: "loop-main-123" }),
+      JSON.stringify({ type: "message", message: { role: "user", content: "Hello world" } }),
+    ];
+    const filePath = path.join(tmpDir, "loop-id-top-level.jsonl");
+    await fs.writeFile(filePath, jsonlLines.join("\n"));
+
+    const entry = await buildSessionEntry(filePath);
+    expect(entry).not.toBeNull();
+    expect(entry!.loopId).toBe("loop-main-123");
+    expect(entry!.content).toContain("User: Hello world");
+  });
+
+  it("extracts loopId from nested metadata", async () => {
+    const jsonlLines = [
+      JSON.stringify({ type: "custom", data: { loop_id: "loop-nested-456" } }),
+      JSON.stringify({ type: "message", message: { role: "assistant", content: "Hello" } }),
+    ];
+    const filePath = path.join(tmpDir, "loop-id-nested.jsonl");
+    await fs.writeFile(filePath, jsonlLines.join("\n"));
+
+    const entry = await buildSessionEntry(filePath);
+    expect(entry).not.toBeNull();
+    expect(entry!.loopId).toBe("loop-nested-456");
+    expect(entry!.lineMap).toEqual([2]);
+  });
 });

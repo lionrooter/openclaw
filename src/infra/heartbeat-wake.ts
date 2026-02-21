@@ -13,6 +13,7 @@ export type HeartbeatWakeHandler = (opts: {
   reason?: string;
   agentId?: string;
   sessionKey?: string;
+  loopId?: string;
 }) => Promise<HeartbeatRunResult>;
 
 type WakeTimerKind = "normal" | "retry";
@@ -22,6 +23,7 @@ type PendingWakeReason = {
   requestedAt: number;
   agentId?: string;
   sessionKey?: string;
+  loopId?: string;
 };
 
 let handler: HeartbeatWakeHandler | null = null;
@@ -76,6 +78,7 @@ function queuePendingWakeReason(params?: {
   requestedAt?: number;
   agentId?: string;
   sessionKey?: string;
+  loopId?: string;
 }) {
   const requestedAt = params?.requestedAt ?? Date.now();
   const normalizedReason = normalizeWakeReason(params?.reason);
@@ -91,6 +94,7 @@ function queuePendingWakeReason(params?: {
     requestedAt,
     agentId: normalizedAgentId,
     sessionKey: normalizedSessionKey,
+    loopId: params?.loopId,
   };
   const previous = pendingWakes.get(wakeTargetKey);
   if (!previous) {
@@ -151,6 +155,7 @@ function schedule(coalesceMs: number, kind: WakeTimerKind = "normal") {
           reason: pendingWake.reason ?? undefined,
           ...(pendingWake.agentId ? { agentId: pendingWake.agentId } : {}),
           ...(pendingWake.sessionKey ? { sessionKey: pendingWake.sessionKey } : {}),
+          ...(pendingWake.loopId ? { loopId: pendingWake.loopId } : {}),
         };
         const res = await active(wakeOpts);
         if (res.status === "skipped" && res.reason === "requests-in-flight") {
@@ -230,11 +235,13 @@ export function requestHeartbeatNow(opts?: {
   coalesceMs?: number;
   agentId?: string;
   sessionKey?: string;
+  loopId?: string;
 }) {
   queuePendingWakeReason({
     reason: opts?.reason,
     agentId: opts?.agentId,
     sessionKey: opts?.sessionKey,
+    loopId: opts?.loopId,
   });
   schedule(opts?.coalesceMs ?? DEFAULT_COALESCE_MS, "normal");
 }
