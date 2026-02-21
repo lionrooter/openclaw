@@ -8,6 +8,7 @@ import {
 } from "./batch-openai.js";
 import { type VoyageBatchRequest, runVoyageEmbeddingBatches } from "./batch-voyage.js";
 import { enforceEmbeddingMaxInputTokens } from "./embedding-chunk-limits.js";
+import { estimateEmbeddingCost, estimateTokensFromTexts } from "./embedding-cost-tracker.js";
 import { estimateUtf8Bytes } from "./embedding-input-limits.js";
 import {
   chunkMarkdown,
@@ -509,11 +510,16 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
           items: texts.length,
           timeoutMs,
         });
-        return await this.withTimeout(
+        const result = await this.withTimeout(
           this.provider.embedBatch(texts),
           timeoutMs,
           `memory embeddings batch timed out after ${Math.round(timeoutMs / 1000)}s`,
         );
+
+        // Track embedding cost
+        this.trackEmbeddingCost(texts, "index");
+
+        return result;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (!this.isRetryableEmbeddingError(message) || attempt >= EMBEDDING_RETRY_MAX_ATTEMPTS) {
@@ -551,11 +557,45 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
     }
     const timeoutMs = this.resolveEmbeddingTimeout("query");
     log.debug("memory embeddings: query start", { provider: this.provider.id, timeoutMs });
-    return await this.withTimeout(
+    const result = await this.withTimeout(
       this.provider.embedQuery(text),
       timeoutMs,
       `memory embeddings query timed out after ${Math.round(timeoutMs / 1000)}s`,
     );
+
+    // Track embedding cost for query
+    this.trackEmbeddingCost([text], "query");
+
+    return result;
+  }
+
+  /**
+   * Track the cost of an embedding operation.
+   * Best-effort — never throws.
+   */
+  private trackEmbeddingCost(texts: string[], operation: "index" | "query" | "reindex"): void {
+    try {
+      if (!this.provider || this.provider.id === "local") {
+        return; // Local embeddings are free
+      }
+      const estimatedTokens = estimateTokensFromTexts(texts);
+      const estimatedCost = estimateEmbeddingCost({
+        provider: this.provider.id,
+        model: this.provider.model,
+        tokens: estimatedTokens,
+      });
+      this.emitEmbeddingCost?.({
+        provider: this.provider.id,
+        model: this.provider.model,
+        agentId: this.agentId,
+        batchSize: texts.length,
+        estimatedTokens,
+        estimatedCost,
+        operation,
+      });
+    } catch {
+      // Cost tracking is best-effort
+    }
   }
 
   protected async withTimeout<T>(
@@ -719,41 +759,87 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
     const sample = embeddings.find((embedding) => embedding.length > 0);
     const vectorReady = sample ? await this.ensureVectorReady(sample.length) : false;
     const now = Date.now();
-    if (vectorReady) {
-      try {
-        this.db
-          .prepare(
-            `DELETE FROM ${VECTOR_TABLE} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`,
-          )
-          .run(entry.path, options.source);
-      } catch {}
+
+    // Determine source trust: curated memory > sessions
+    const sourceTrust = options.source === "memory" ? 1.0 : 0.8;
+
+    // Compute next version for this (path, source) pair
+    const versionRow = this.db
+      .prepare(
+        `SELECT COALESCE(MAX(version), 0) AS max_ver FROM chunks WHERE path = ? AND source = ?`,
+      )
+      .get(entry.path, options.source) as { max_ver: number } | undefined;
+    const nextVersion = (versionRow?.max_ver ?? 0) + 1;
+
+    // Collect IDs of the new chunks we're about to insert
+    const newChunkIds: string[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      newChunkIds.push(
+        hashText(
+          `${options.source}:${entry.path}:${chunk.startLine}:${chunk.endLine}:${chunk.hash}:${this.provider.model}`,
+        ),
+      );
     }
-    if (this.fts.enabled && this.fts.available) {
-      try {
-        this.db
-          .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
-          .run(entry.path, options.source, this.provider.model);
-      } catch {}
+    const newIdSet = new Set(newChunkIds);
+
+    // --- Supersede pattern: mark old active chunks as superseded instead of deleting ---
+    // Find all currently active chunks for this path+source
+    const oldActiveChunks = this.db
+      .prepare(`SELECT id FROM chunks WHERE path = ? AND source = ? AND superseded_by IS NULL`)
+      .all(entry.path, options.source) as Array<{ id: string }>;
+
+    // Mark old chunks as superseded (use first new chunk ID as the superseder reference)
+    const supersederRef = newChunkIds[0] ?? "reindex";
+    for (const old of oldActiveChunks) {
+      if (newIdSet.has(old.id)) {
+        continue; // chunk is being re-inserted with same content, skip
+      }
+      this.db
+        .prepare(`UPDATE chunks SET superseded_by = ?, superseded_at = ? WHERE id = ?`)
+        .run(supersederRef, now, old.id);
+      // Remove superseded chunks from vector and FTS indexes (they shouldn't appear in search)
+      if (vectorReady) {
+        try {
+          this.db.prepare(`DELETE FROM ${VECTOR_TABLE} WHERE id = ?`).run(old.id);
+        } catch {}
+      }
+      if (this.fts.enabled && this.fts.available) {
+        try {
+          this.db.prepare(`DELETE FROM ${FTS_TABLE} WHERE id = ?`).run(old.id);
+        } catch {}
+      }
     }
-    this.db
-      .prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`)
-      .run(entry.path, options.source);
+
+    // Log memory mutations for audit trail
+    this.emitAuditEvent?.({
+      op: "supersede",
+      path: entry.path,
+      source: options.source,
+      supersededCount: oldActiveChunks.filter((o) => !newIdSet.has(o.id)).length,
+      newCount: chunks.length,
+      version: nextVersion,
+      timestamp: now,
+    });
+
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
       const embedding = embeddings[i] ?? [];
-      const id = hashText(
-        `${options.source}:${entry.path}:${chunk.startLine}:${chunk.endLine}:${chunk.hash}:${this.provider.model}`,
-      );
+      const id = newChunkIds[i];
       this.db
         .prepare(
-          `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, embedding, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, embedding, updated_at, version, source_trust)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              hash=excluded.hash,
              model=excluded.model,
              text=excluded.text,
              embedding=excluded.embedding,
-             updated_at=excluded.updated_at`,
+             updated_at=excluded.updated_at,
+             version=excluded.version,
+             source_trust=excluded.source_trust,
+             superseded_by=NULL,
+             superseded_at=NULL`,
         )
         .run(
           id,
@@ -766,6 +852,8 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
           chunk.text,
           JSON.stringify(embedding),
           now,
+          nextVersion,
+          sourceTrust,
         );
       if (vectorReady && embedding.length > 0) {
         try {

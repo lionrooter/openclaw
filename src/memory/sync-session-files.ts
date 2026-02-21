@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import type { AuditEventEmitter } from "./audit-log.js";
 import type { SessionFileEntry } from "./session-files.js";
 import {
   buildSessionEntry,
@@ -28,6 +29,7 @@ export async function syncSessionFiles(params: {
   ftsAvailable: boolean;
   model: string;
   dirtyFiles: Set<string>;
+  emitAuditEvent?: AuditEventEmitter;
 }) {
   const files = await listSessionFilesForAgent(params.agentId);
   const activePaths = new Set(files.map((file) => sessionPathForFile(file)));
@@ -77,5 +79,6 @@ export async function syncSessionFiles(params: {
     ftsEnabled: params.ftsEnabled,
     ftsAvailable: params.ftsAvailable,
     model: params.model,
+    emitAuditEvent: params.emitAuditEvent,
   });
 }

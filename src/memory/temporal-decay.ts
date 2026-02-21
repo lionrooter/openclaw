@@ -7,7 +7,7 @@ export type TemporalDecayConfig = {
 };
 
 export const DEFAULT_TEMPORAL_DECAY_CONFIG: TemporalDecayConfig = {
-  enabled: false,
+  enabled: true,
   halfLifeDays: 30,
 };
 

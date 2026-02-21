@@ -35,11 +35,11 @@ export async function searchVector(params: {
     const rows = params.db
       .prepare(
         `SELECT c.id, c.path, c.start_line, c.end_line, c.text,\n` +
-          `       c.source,\n` +
+          `       c.source, c.source_trust,\n` +
           `       vec_distance_cosine(v.embedding, ?) AS dist\n` +
           `  FROM ${params.vectorTable} v\n` +
           `  JOIN chunks c ON c.id = v.id\n` +
-          ` WHERE c.model = ?${params.sourceFilterVec.sql}\n` +
+          ` WHERE c.model = ? AND c.superseded_by IS NULL${params.sourceFilterVec.sql}\n` +
           ` ORDER BY dist ASC\n` +
           ` LIMIT ?`,
       )
@@ -55,6 +55,7 @@ export async function searchVector(params: {
       end_line: number;
       text: string;
       source: SearchSource;
+      source_trust: number;
       dist: number;
     }>;
     return rows.map((row) => ({
@@ -62,7 +63,7 @@ export async function searchVector(params: {
       path: row.path,
       startLine: row.start_line,
       endLine: row.end_line,
-      score: 1 - row.dist,
+      score: (1 - row.dist) * (row.source_trust ?? 1.0),
       snippet: truncateUtf16Safe(row.text, params.snippetMaxChars),
       source: row.source,
     }));
@@ -72,6 +73,7 @@ export async function searchVector(params: {
     db: params.db,
     providerModel: params.providerModel,
     sourceFilter: params.sourceFilterChunks,
+    excludeSuperseded: true,
   });
   const scored = candidates
     .map((chunk) => ({
@@ -97,6 +99,7 @@ export function listChunks(params: {
   db: DatabaseSync;
   providerModel: string;
   sourceFilter: { sql: string; params: SearchSource[] };
+  excludeSuperseded?: boolean;
 }): Array<{
   id: string;
   path: string;
@@ -106,11 +109,12 @@ export function listChunks(params: {
   embedding: number[];
   source: SearchSource;
 }> {
+  const supersedeClause = params.excludeSuperseded !== false ? " AND superseded_by IS NULL" : "";
   const rows = params.db
     .prepare(
       `SELECT id, path, start_line, end_line, text, embedding, source\n` +
         `  FROM chunks\n` +
-        ` WHERE model = ?${params.sourceFilter.sql}`,
+        ` WHERE model = ?${supersedeClause}${params.sourceFilter.sql}`,
     )
     .all(params.providerModel, ...params.sourceFilter.params) as Array<{
     id: string;

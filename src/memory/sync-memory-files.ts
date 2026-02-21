@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import type { AuditEventEmitter } from "./audit-log.js";
 import { buildFileEntry, listMemoryFiles, type MemoryFileEntry } from "./internal.js";
 import { indexFileEntryIfChanged } from "./sync-index.js";
 import type { SyncProgressState } from "./sync-progress.js";
@@ -23,6 +24,7 @@ export async function syncMemoryFiles(params: {
   ftsEnabled: boolean;
   ftsAvailable: boolean;
   model: string;
+  emitAuditEvent?: AuditEventEmitter;
 }) {
   const files = await listMemoryFiles(params.workspaceDir, params.extraPaths);
   const fileEntries = (
@@ -64,5 +66,6 @@ export async function syncMemoryFiles(params: {
     ftsEnabled: params.ftsEnabled,
     ftsAvailable: params.ftsAvailable,
     model: params.model,
+    emitAuditEvent: params.emitAuditEvent,
   });
 }

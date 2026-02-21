@@ -7,6 +7,9 @@ import type { ResolvedMemorySearchConfig } from "../agents/memory-search.js";
 import { resolveMemorySearchConfig } from "../agents/memory-search.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { createMemoryAuditEmitter } from "./audit-log.js";
+import { searchSharedMemory } from "./cross-agent-memory.js";
+import { createEmbeddingCostEmitter } from "./embedding-cost-tracker.js";
 import {
   createEmbeddingProvider,
   type EmbeddingProvider,
@@ -21,6 +24,7 @@ import { isMemoryPath, normalizeExtraMemoryPaths } from "./internal.js";
 import { MemoryManagerEmbeddingOps } from "./manager-embedding-ops.js";
 import { searchKeyword, searchVector } from "./manager-search.js";
 import { extractKeywords } from "./query-expansion.js";
+import { applyTrustToResults } from "./trust-scoring.js";
 import type {
   MemoryEmbeddingProbeResult,
   MemoryProviderStatus,
@@ -183,6 +187,13 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     const statusOnly = params.purpose === "status";
     this.dirty = this.sources.has("memory") && (statusOnly ? !meta : true);
     this.batch = this.resolveBatchConfig();
+
+    // Initialize memory mutation audit log
+    const auditDir = path.join(path.dirname(params.settings.store.path), "audit");
+    this.emitAuditEvent = createMemoryAuditEmitter(auditDir, params.agentId);
+
+    // Initialize embedding cost tracker
+    this.emitEmbeddingCost = createEmbeddingCostEmitter(params.agentId);
   }
 
   async warmSession(sessionKey?: string): Promise<void> {
@@ -255,7 +266,9 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
         }
       }
 
-      const merged = [...seenIds.values()]
+      // Apply trust scoring to FTS-only results
+      const trusted = applyTrustToResults([...seenIds.values()]);
+      const merged = trusted
         .toSorted((a, b) => b.score - a.score)
         .filter((entry) => entry.score >= minScore)
         .slice(0, maxResults);
@@ -286,7 +299,49 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       temporalDecay: hybrid.temporalDecay,
     });
 
-    return merged.filter((entry) => entry.score >= minScore).slice(0, maxResults);
+    const ownResults = merged.filter((entry) => entry.score >= minScore).slice(0, maxResults);
+
+    // Cross-agent sharing (piece #19): also search shared memory pool
+    const sharedResults = this.searchSharedPool(cleaned, maxResults);
+    if (sharedResults.length === 0) {
+      return ownResults;
+    }
+
+    // Merge shared results into own results, keeping total under maxResults
+    // Reserve at most 2 slots for shared memory to avoid overwhelming own results
+    const sharedSlots = Math.min(2, maxResults - ownResults.length, sharedResults.length);
+    if (sharedSlots <= 0) {
+      return ownResults;
+    }
+
+    return [...ownResults, ...sharedResults.slice(0, sharedSlots)];
+  }
+
+  /**
+   * Search the cross-agent shared memory pool.
+   * Converts shared memory entries to MemorySearchResult format.
+   * Best-effort — never throws.
+   */
+  private searchSharedPool(query: string, maxResults: number): MemorySearchResult[] {
+    try {
+      const shared = searchSharedMemory({
+        query,
+        agentId: this.agentId,
+        maxResults: Math.min(3, maxResults),
+      });
+
+      return shared.map((result) => ({
+        path: `shared/${result.entry.publishedBy}`,
+        startLine: 0,
+        endLine: 0,
+        score: result.score,
+        snippet: result.entry.fact,
+        source: "memory" as const,
+        citation: `[shared by ${result.entry.publishedBy}] ${result.entry.tags.join(", ")}`,
+      }));
+    } catch {
+      return [];
+    }
   }
 
   private async searchVector(

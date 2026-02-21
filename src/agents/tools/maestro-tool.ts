@@ -1,5 +1,5 @@
-import { Type } from "@sinclair/typebox";
 import { spawnSync } from "node:child_process";
+import { Type } from "@sinclair/typebox";
 import { stringEnum } from "../schema/typebox.js";
 import { type AnyAgentTool, ToolInputError, jsonResult, readStringParam } from "./common.js";
 
@@ -20,6 +20,7 @@ const MaestroToolSchema = Type.Object({
   // queue identity
   task: Type.Optional(Type.String()),
   owner: Type.Optional(Type.String()),
+  loopId: Type.Optional(Type.String()),
   // enqueue
   title: Type.Optional(Type.String()),
   ask: Type.Optional(Type.String()),
@@ -123,6 +124,7 @@ function buildTaskApiArgs(action: string, params: Record<string, unknown>): stri
       pushArg(args, "--stream", params.stream);
       pushArg(args, "--topic", params.topic);
       pushArg(args, "--worktree", params.worktree);
+      pushArg(args, "--loop-id", params.loopId);
       return args;
     }
     case "complete": {
@@ -130,6 +132,7 @@ function buildTaskApiArgs(action: string, params: Record<string, unknown>): stri
       const args = ["complete", task];
       pushArg(args, "--result", params.result);
       pushArg(args, "--note", params.note);
+      pushArg(args, "--loop-id", params.loopId);
       pushArg(args, "--actor", params.actor);
       pushNumber(args, "--expected-revision", params.expectedRevision);
       return args;

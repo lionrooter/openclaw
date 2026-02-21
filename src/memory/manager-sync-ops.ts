@@ -11,6 +11,8 @@ import { resolveSessionTranscriptsDirForAgent } from "../config/sessions/paths.j
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { onSessionTranscriptUpdate } from "../sessions/transcript-events.js";
 import { resolveUserPath } from "../utils.js";
+import type { AuditEventEmitter } from "./audit-log.js";
+import type { EmbeddingCostEmitter } from "./embedding-cost-tracker.js";
 import { DEFAULT_GEMINI_EMBEDDING_MODEL } from "./embeddings-gemini.js";
 import { DEFAULT_OPENAI_EMBEDDING_MODEL } from "./embeddings-openai.js";
 import { DEFAULT_VOYAGE_EMBEDDING_MODEL } from "./embeddings-voyage.js";
@@ -21,6 +23,8 @@ import {
   type OpenAiEmbeddingClient,
   type VoyageEmbeddingClient,
 } from "./embeddings.js";
+import { processSessionForEpisode } from "./episode-tracker.js";
+import { extractAndProcessFacts } from "./fact-extractor.js";
 import { isFileMissingError } from "./fs-utils.js";
 import {
   buildFileEntry,
@@ -129,6 +133,12 @@ export abstract class MemoryManagerSyncOps {
     string,
     { lastSize: number; pendingBytes: number; pendingMessages: number }
   >();
+
+  /** Audit event emitter — set by MemoryIndexManager during construction */
+  protected emitAuditEvent?: AuditEventEmitter;
+
+  /** Embedding cost emitter — set by MemoryIndexManager during construction */
+  protected emitEmbeddingCost?: EmbeddingCostEmitter;
 
   protected abstract readonly cache: { enabled: boolean; maxEntries?: number };
   protected abstract db: DatabaseSync;
@@ -678,14 +688,24 @@ export abstract class MemoryManagerSyncOps {
     });
     await runWithConcurrency(tasks, this.getIndexConcurrency());
 
+    // Use supersede pattern for stale memory files
     const staleRows = this.db
       .prepare(`SELECT path FROM files WHERE source = ?`)
       .all("memory") as Array<{ path: string }>;
+    const stalePaths: string[] = [];
+    const now = Date.now();
     for (const stale of staleRows) {
       if (activePaths.has(stale.path)) {
         continue;
       }
-      this.db.prepare(`DELETE FROM files WHERE path = ? AND source = ?`).run(stale.path, "memory");
+      stalePaths.push(stale.path);
+      // Mark chunks as superseded instead of deleting
+      this.db
+        .prepare(
+          `UPDATE chunks SET superseded_by = 'file_removed', superseded_at = ? WHERE path = ? AND source = ? AND superseded_by IS NULL`,
+        )
+        .run(now, stale.path, "memory");
+      // Remove from search indexes
       try {
         this.db
           .prepare(
@@ -693,7 +713,6 @@ export abstract class MemoryManagerSyncOps {
           )
           .run(stale.path, "memory");
       } catch {}
-      this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(stale.path, "memory");
       if (this.fts.enabled && this.fts.available) {
         try {
           this.db
@@ -701,6 +720,16 @@ export abstract class MemoryManagerSyncOps {
             .run(stale.path, "memory", this.provider.model);
         } catch {}
       }
+      // Remove the file entry
+      this.db.prepare(`DELETE FROM files WHERE path = ? AND source = ?`).run(stale.path, "memory");
+    }
+    if (stalePaths.length > 0) {
+      this.emitAuditEvent?.({
+        op: "delete_stale",
+        source: "memory",
+        deletedPaths: stalePaths,
+        timestamp: now,
+      });
     }
   }
 
@@ -771,6 +800,38 @@ export abstract class MemoryManagerSyncOps {
       }
       await this.indexFile(entry, { source: "sessions", content: entry.content });
       this.resetSessionDelta(absPath, entry.size);
+
+      // --- Incremental learning: extract facts and episodes from session ---
+      // Episode tracking (piece #21): create structured episode from session
+      try {
+        processSessionForEpisode({
+          agentId: this.agentId,
+          sessionFile: absPath,
+          sessionContent: entry.content,
+        });
+      } catch (err) {
+        log.debug(`Episode extraction skipped: ${String(err)}`);
+      }
+
+      // Fact extraction (piece #29): extract and publish learned facts
+      try {
+        const factResult = extractAndProcessFacts({
+          agentId: this.agentId,
+          sessionContent: entry.content,
+          sessionFile: absPath,
+          workspaceDir: this.workspaceDir,
+        });
+        if (factResult.extracted > 0) {
+          log.debug(`Extracted ${factResult.extracted} facts from session`, {
+            published: factResult.published,
+            appended: factResult.appended,
+          });
+        }
+      } catch (err) {
+        log.debug(`Fact extraction skipped: ${String(err)}`);
+      }
+      // --- End incremental learning ---
+
       if (params.progress) {
         params.progress.completed += 1;
         params.progress.report({
@@ -781,16 +842,24 @@ export abstract class MemoryManagerSyncOps {
     });
     await runWithConcurrency(tasks, this.getIndexConcurrency());
 
+    // Use supersede pattern for stale session files
     const staleRows = this.db
       .prepare(`SELECT path FROM files WHERE source = ?`)
       .all("sessions") as Array<{ path: string }>;
+    const stalePaths: string[] = [];
+    const staleNow = Date.now();
     for (const stale of staleRows) {
       if (activePaths.has(stale.path)) {
         continue;
       }
+      stalePaths.push(stale.path);
+      // Mark chunks as superseded instead of deleting
       this.db
-        .prepare(`DELETE FROM files WHERE path = ? AND source = ?`)
-        .run(stale.path, "sessions");
+        .prepare(
+          `UPDATE chunks SET superseded_by = 'file_removed', superseded_at = ? WHERE path = ? AND source = ? AND superseded_by IS NULL`,
+        )
+        .run(staleNow, stale.path, "sessions");
+      // Remove from search indexes
       try {
         this.db
           .prepare(
@@ -798,9 +867,6 @@ export abstract class MemoryManagerSyncOps {
           )
           .run(stale.path, "sessions");
       } catch {}
-      this.db
-        .prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`)
-        .run(stale.path, "sessions");
       if (this.fts.enabled && this.fts.available) {
         try {
           this.db
@@ -808,6 +874,18 @@ export abstract class MemoryManagerSyncOps {
             .run(stale.path, "sessions", this.provider.model);
         } catch {}
       }
+      // Remove the file entry
+      this.db
+        .prepare(`DELETE FROM files WHERE path = ? AND source = ?`)
+        .run(stale.path, "sessions");
+    }
+    if (stalePaths.length > 0) {
+      this.emitAuditEvent?.({
+        op: "delete_stale",
+        source: "sessions",
+        deletedPaths: stalePaths,
+        timestamp: staleNow,
+      });
     }
   }
 

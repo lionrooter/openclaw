@@ -295,6 +295,11 @@ export async function runCliAgent(params: {
           });
         }
         const err = stderr || stdout || "CLI failed.";
+        if (!stderr && !stdout) {
+          log.warn(
+            `cli empty output: provider=${params.provider} model=${modelId} exitCode=${result.exitCode} signal=${result.exitSignal ?? "none"} reason=${result.reason}`,
+          );
+        }
         const reason = classifyFailoverReason(err) ?? "unknown";
         const status = resolveFailoverStatus(reason);
         throw new FailoverError(err, {
