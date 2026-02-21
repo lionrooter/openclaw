@@ -14,6 +14,19 @@ describe("maestro-tool", () => {
     expect(args).toEqual(["list", "--status", "active", "--owner", "cody", "--json"]);
   });
 
+  it("builds claim args with optional loop id", () => {
+    const args = __testing.buildTaskApiArgs("claim", {
+      task: "2026-02-16__x.md",
+      owner: "cody",
+      actor: "cody",
+      loopId: "loop_xyz",
+    });
+    expect(args).toContain("claim");
+    expect(args).toContain("2026-02-16__x.md");
+    expect(args).toContain("--loop-id");
+    expect(args).toContain("loop_xyz");
+  });
+
   it("builds enqueue args with required fields", () => {
     const args = __testing.buildTaskApiArgs("enqueue", {
       owner: "cody",

@@ -21,7 +21,7 @@ export type MMRConfig = {
 };
 
 export const DEFAULT_MMR_CONFIG: MMRConfig = {
-  enabled: false,
+  enabled: true,
   lambda: 0.7,
 };
 

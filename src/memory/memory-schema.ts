@@ -79,6 +79,21 @@ export function ensureMemoryIndexSchema(params: {
   params.db.exec(`CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path);`);
   params.db.exec(`CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source);`);
 
+  // --- Conflict resolution / supersede pattern ---
+  // Chunks are never hard-deleted when re-indexed; they are marked superseded.
+  // superseded_by: the chunk ID that replaced this one (NULL = active)
+  // superseded_at: timestamp when the chunk was superseded
+  // version: monotonically increasing version per (path, source) pair
+  ensureColumn(params.db, "chunks", "superseded_by", "TEXT DEFAULT NULL");
+  ensureColumn(params.db, "chunks", "superseded_at", "INTEGER DEFAULT NULL");
+  ensureColumn(params.db, "chunks", "version", "INTEGER NOT NULL DEFAULT 1");
+  params.db.exec(`CREATE INDEX IF NOT EXISTS idx_chunks_superseded ON chunks(superseded_by);`);
+
+  // --- Trust scoring ---
+  // source_trust: multiplier applied during search scoring (1.0 = neutral)
+  // Curated memory files get higher trust than raw session transcripts.
+  ensureColumn(params.db, "chunks", "source_trust", "REAL NOT NULL DEFAULT 1.0");
+
   return { ftsAvailable, ...(ftsError ? { ftsError } : {}) };
 }
 

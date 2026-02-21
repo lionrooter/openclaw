@@ -4,6 +4,11 @@ import {
   type TemporalDecayConfig,
   DEFAULT_TEMPORAL_DECAY_CONFIG,
 } from "./temporal-decay.js";
+import {
+  resolveSourceTrust,
+  type SourceTrustConfig,
+  DEFAULT_SOURCE_TRUST,
+} from "./trust-scoring.js";
 
 export type HybridSource = string;
 
@@ -58,6 +63,8 @@ export async function mergeHybridResults(params: {
   mmr?: Partial<MMRConfig>;
   /** Temporal decay configuration for recency-aware scoring */
   temporalDecay?: Partial<TemporalDecayConfig>;
+  /** Source trust configuration for reliability-weighted scoring */
+  sourceTrust?: Partial<SourceTrustConfig>;
   /** Test seam for deterministic time-dependent behavior */
   nowMs?: number;
 }): Promise<
@@ -118,8 +125,13 @@ export async function mergeHybridResults(params: {
     }
   }
 
+  const trustConfig = { ...DEFAULT_SOURCE_TRUST, ...params.sourceTrust };
+
   const merged = Array.from(byId.values()).map((entry) => {
-    const score = params.vectorWeight * entry.vectorScore + params.textWeight * entry.textScore;
+    const rawScore = params.vectorWeight * entry.vectorScore + params.textWeight * entry.textScore;
+    // Apply source trust multiplier — curated memory > sessions
+    const trust = resolveSourceTrust(entry.source, entry.path, trustConfig);
+    const score = rawScore * trust;
     return {
       path: entry.path,
       startLine: entry.startLine,
