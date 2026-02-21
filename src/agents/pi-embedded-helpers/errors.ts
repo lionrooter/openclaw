@@ -648,6 +648,7 @@ const ERROR_PATTERNS = {
     "usage limit",
     "tpm",
     "tokens per minute",
+    "hit your limit",
   ],
   overloaded: [
     /overloaded_error|"type"\s*:\s*"overloaded_error"/i,

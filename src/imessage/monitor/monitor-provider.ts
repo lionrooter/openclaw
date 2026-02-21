@@ -161,7 +161,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     log: (message) => runtime.log?.(warn(message)),
   });
   const dmPolicy = imessageCfg.dmPolicy ?? "pairing";
-  const includeAttachments = opts.includeAttachments ?? imessageCfg.includeAttachments ?? false;
+  const includeAttachments = opts.includeAttachments ?? imessageCfg.includeAttachments ?? true;
   const mediaMaxBytes = (opts.mediaMaxMb ?? imessageCfg.mediaMaxMb ?? 16) * 1024 * 1024;
   const cliPath = opts.cliPath ?? imessageCfg.cliPath ?? "imsg";
   const dbPath = opts.dbPath ?? imessageCfg.dbPath;
