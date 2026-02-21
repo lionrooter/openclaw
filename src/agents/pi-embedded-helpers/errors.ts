@@ -244,18 +244,6 @@ function shouldRewriteContextOverflowText(raw: string): boolean {
   );
 }
 
-function shouldRewriteBillingText(raw: string): boolean {
-  if (!isBillingErrorMessage(raw)) {
-    return false;
-  }
-  return (
-    isRawApiErrorPayload(raw) ||
-    isLikelyHttpErrorText(raw) ||
-    ERROR_PREFIX_RE.test(raw) ||
-    BILLING_ERROR_HEAD_RE.test(raw)
-  );
-}
-
 type ErrorPayload = Record<string, unknown>;
 
 function isErrorPayloadObject(payload: unknown): payload is ErrorPayload {
@@ -563,20 +551,6 @@ export function sanitizeUserFacingText(text: string, opts?: { errorContext?: boo
       return "";
     }
     return collapseConsecutiveDuplicateBlocks(cleaned);
-  }
-
-  if (!errorContext && /incorrect role information|roles must alternate/i.test(trimmed)) {
-    return (
-      "Message ordering conflict - please try again. " +
-      "If this persists, use /new to start a fresh session."
-    );
-  }
-
-  // Preserve legacy behavior for explicit billing-head text outside known
-  // error contexts (e.g., "billing: please upgrade your plan"), while
-  // keeping conversational billing mentions untouched.
-  if (shouldRewriteBillingText(trimmed)) {
-    return BILLING_ERROR_USER_MESSAGE;
   }
 
   // Strip leading blank lines (including whitespace-only lines) without clobbering indentation on

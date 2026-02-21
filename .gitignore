@@ -18,6 +18,9 @@ ui/src/ui/__screenshots__/
 ui/playwright-report/
 ui/test-results/
 
+# Mise configuration files
+mise.toml
+
 # Android build artifacts
 apps/android/.gradle/
 apps/android/app/build/
@@ -87,8 +90,6 @@ USER.md
 /memory/
 .agent/*.json
 !.agent/workflows/
-.agents/
-.agents
 /local/
 package-lock.json
 # Local skills & assets (custom, not for upstream)
@@ -100,6 +101,9 @@ skills/nano-banana-pro/*.png
 skills/spotify-applescript/
 extensions/matrix/matrix
 .claude/settings.local.json
+.agents/
+.agents
+.agent/
 
 # Local iOS signing overrides
 apps/ios/LocalSigning.xcconfig

@@ -44,7 +44,9 @@ const skillCommandDebugOnce = new Set<string>();
  */
 function compactSkillPaths(skills: Skill[]): Skill[] {
   const home = os.homedir();
-  if (!home) return skills;
+  if (!home) {
+    return skills;
+  }
   const prefix = home.endsWith(path.sep) ? home : home + path.sep;
   return skills.map((s) => ({
     ...s,
@@ -152,8 +154,12 @@ function listChildDirectories(dir: string): string[] {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     const dirs: string[] = [];
     for (const entry of entries) {
-      if (entry.name.startsWith(".")) continue;
-      if (entry.name === "node_modules") continue;
+      if (entry.name.startsWith(".")) {
+        continue;
+      }
+      if (entry.name === "node_modules") {
+        continue;
+      }
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         dirs.push(entry.name);
@@ -260,7 +266,7 @@ function loadSkillEntries(
     const suspicious = childDirs.length > limits.maxCandidatesPerRoot;
 
     const maxCandidates = Math.max(0, limits.maxSkillsLoadedPerSource);
-    const limitedChildren = childDirs.slice().sort().slice(0, maxCandidates);
+    const limitedChildren = childDirs.slice().toSorted().slice(0, maxCandidates);
 
     if (suspicious) {
       skillsLogger.warn("Skills root looks suspiciously large, truncating discovery.", {
@@ -314,7 +320,7 @@ function loadSkillEntries(
     if (loadedSkills.length > limits.maxSkillsLoadedPerSource) {
       return loadedSkills
         .slice()
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .toSorted((a, b) => a.name.localeCompare(b.name))
         .slice(0, limits.maxSkillsLoadedPerSource);
     }
 
@@ -490,6 +496,7 @@ export function buildWorkspaceSkillSnapshot(
     skills: eligible.map((entry) => ({
       name: entry.skill.name,
       primaryEnv: entry.metadata?.primaryEnv,
+      requiredEnv: entry.metadata?.requires?.env?.slice(),
     })),
     ...(skillFilter === undefined ? {} : { skillFilter }),
     resolvedSkills,
