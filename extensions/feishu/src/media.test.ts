@@ -1,4 +1,3 @@
-import type { OpenClawConfig } from "openclaw/plugin-sdk";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -39,7 +38,15 @@ vi.mock("./runtime.js", () => ({
 
 import { downloadImageFeishu, downloadMessageResourceFeishu, sendMediaFeishu } from "./media.js";
 
-const TEST_CFG = {} as OpenClawConfig;
+function expectPathIsolatedToTmpRoot(pathValue: string, key: string): void {
+  expect(pathValue).not.toContain(key);
+  expect(pathValue).not.toContain("..");
+
+  const tmpRoot = path.resolve(os.tmpdir());
+  const resolved = path.resolve(pathValue);
+  const rel = path.relative(tmpRoot, resolved);
+  expect(rel === ".." || rel.startsWith(`..${path.sep}`)).toBe(false);
+}
 
 describe("sendMediaFeishu msg_type routing", () => {
   beforeEach(() => {
@@ -103,7 +110,7 @@ describe("sendMediaFeishu msg_type routing", () => {
 
   it("uses msg_type=media for mp4", async () => {
     await sendMediaFeishu({
-      cfg: TEST_CFG,
+      cfg: {} as any,
       to: "user:ou_target",
       mediaBuffer: Buffer.from("video"),
       fileName: "clip.mp4",
@@ -124,7 +131,7 @@ describe("sendMediaFeishu msg_type routing", () => {
 
   it("uses msg_type=media for opus", async () => {
     await sendMediaFeishu({
-      cfg: TEST_CFG,
+      cfg: {} as any,
       to: "user:ou_target",
       mediaBuffer: Buffer.from("audio"),
       fileName: "voice.opus",
@@ -145,7 +152,7 @@ describe("sendMediaFeishu msg_type routing", () => {
 
   it("uses msg_type=file for documents", async () => {
     await sendMediaFeishu({
-      cfg: TEST_CFG,
+      cfg: {} as any,
       to: "user:ou_target",
       mediaBuffer: Buffer.from("doc"),
       fileName: "paper.pdf",
@@ -166,7 +173,7 @@ describe("sendMediaFeishu msg_type routing", () => {
 
   it("uses msg_type=media when replying with mp4", async () => {
     await sendMediaFeishu({
-      cfg: TEST_CFG,
+      cfg: {} as any,
       to: "user:ou_target",
       mediaBuffer: Buffer.from("video"),
       fileName: "reply.mp4",
@@ -190,7 +197,7 @@ describe("sendMediaFeishu msg_type routing", () => {
 
     await expect(
       sendMediaFeishu({
-        cfg: TEST_CFG,
+        cfg: {} as any,
         to: "user:ou_target",
         mediaUrl: "https://x/img",
         fileName: "voice.opus",
@@ -220,13 +227,7 @@ describe("sendMediaFeishu msg_type routing", () => {
 
     expect(result.buffer).toEqual(Buffer.from("image-data"));
     expect(capturedPath).toBeDefined();
-    expect(capturedPath).not.toContain(imageKey);
-    expect(capturedPath).not.toContain("..");
-
-    const tmpRoot = path.resolve(os.tmpdir());
-    const resolved = path.resolve(capturedPath as string);
-    const rel = path.relative(tmpRoot, resolved);
-    expect(rel === ".." || rel.startsWith(`..${path.sep}`)).toBe(false);
+    expectPathIsolatedToTmpRoot(capturedPath as string, imageKey);
   });
 
   it("uses isolated temp paths for message resource downloads", async () => {
@@ -249,13 +250,7 @@ describe("sendMediaFeishu msg_type routing", () => {
 
     expect(result.buffer).toEqual(Buffer.from("resource-data"));
     expect(capturedPath).toBeDefined();
-    expect(capturedPath).not.toContain(fileKey);
-    expect(capturedPath).not.toContain("..");
-
-    const tmpRoot = path.resolve(os.tmpdir());
-    const resolved = path.resolve(capturedPath as string);
-    const rel = path.relative(tmpRoot, resolved);
-    expect(rel === ".." || rel.startsWith(`..${path.sep}`)).toBe(false);
+    expectPathIsolatedToTmpRoot(capturedPath as string, fileKey);
   });
 
   it("rejects invalid image keys before calling feishu api", async () => {
