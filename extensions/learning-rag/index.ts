@@ -16,9 +16,9 @@
  * `owner` property on Note nodes.
  */
 
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import neo4j from "neo4j-driver";
 import OpenAI from "openai";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 
 // ============================================================================
 // Types
@@ -212,7 +212,9 @@ class Neo4jRAG {
 
       return {
         seeds: row.get("seeds") as SearchResult[],
-        neighbors: row.get("neighbors") as GraphSearchResult["neighbors"],
+        neighbors: (row.get("neighbors") as GraphSearchResult["neighbors"]).filter(
+          (n) => n.filePath != null,
+        ),
       };
     } finally {
       await session.close();
@@ -240,6 +242,9 @@ class QueryEmbedder {
       model: "text-embedding-3-small",
       input: text,
     });
+    if (!response.data[0]) {
+      throw new Error("learning-rag: embedding API returned empty data array");
+    }
     return response.data[0].embedding;
   }
 }

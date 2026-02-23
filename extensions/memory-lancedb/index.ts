@@ -175,6 +175,9 @@ class Embeddings {
       model: this.model,
       input: text,
     });
+    if (!response.data[0]) {
+      throw new Error("memory-lancedb: embedding API returned empty data array");
+    }
     return response.data[0].embedding;
   }
 }
