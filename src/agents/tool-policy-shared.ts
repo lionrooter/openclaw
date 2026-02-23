@@ -14,11 +14,12 @@ const TOOL_NAME_ALIASES: Record<string, string> = {
   "apply-patch": "apply_patch",
 };
 
+const _coreGroups = CORE_TOOL_GROUPS as Record<string, string[] | undefined>;
 export const TOOL_GROUPS: Record<string, string[]> = {
   ...CORE_TOOL_GROUPS,
   // maestro tool is not in CORE_TOOL_DEFINITIONS (it's a dynamic tool) — add it to its groups.
-  "group:automation": [...(CORE_TOOL_GROUPS["group:automation"] ?? []), "maestro"],
-  "group:openclaw": [...(CORE_TOOL_GROUPS["group:openclaw"] ?? []), "maestro"],
+  "group:automation": [...(_coreGroups["group:automation"] ?? []), "maestro"],
+  "group:openclaw": [...(_coreGroups["group:openclaw"] ?? []), "maestro"],
 };
 
 export function normalizeToolName(name: string) {

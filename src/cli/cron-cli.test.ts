@@ -507,7 +507,7 @@ describe("cron cli", () => {
 
   it("runs delivery preflight before cron run", async () => {
     callGatewayFromCli.mockClear();
-    callGatewayFromCli.mockImplementation(async (method: string) => {
+    callGatewayFromCli.mockImplementation((async (method: string) => {
       if (method === "cron.list") {
         return {
           jobs: [
@@ -541,8 +541,8 @@ describe("cron cli", () => {
       if (method === "cron.run") {
         return { ok: true, ran: true };
       }
-      return defaultGatewayRpcMock(method, {}, undefined);
-    });
+      return defaultGatewayMock(method, {}, undefined);
+    }) as never);
 
     const program = buildProgram();
     await program.parseAsync(["cron", "run", "job-1"], { from: "user" });
@@ -553,13 +553,13 @@ describe("cron cli", () => {
     expect(methods).toContain("cron.run");
     expect(methods.indexOf("cron.list")).toBeLessThan(methods.indexOf("cron.run"));
 
-    callGatewayFromCli.mockImplementation(defaultGatewayRpcMock);
+    callGatewayFromCli.mockImplementation(defaultGatewayMock);
   });
 
   it("recovers cron run timeout by verifying cron.runs", async () => {
     callGatewayFromCli.mockClear();
     let runsCallCount = 0;
-    callGatewayFromCli.mockImplementation(async (method: string) => {
+    callGatewayFromCli.mockImplementation((async (method: string) => {
       if (method === "cron.list") {
         return { jobs: [] };
       }
@@ -578,8 +578,8 @@ describe("cron cli", () => {
       if (method === "cron.run") {
         throw new Error("gateway timeout after 30000ms");
       }
-      return defaultGatewayRpcMock(method, {}, undefined);
-    });
+      return defaultGatewayMock(method, {}, undefined);
+    }) as never);
 
     const program = buildProgram();
     await program.parseAsync(
@@ -592,13 +592,13 @@ describe("cron cli", () => {
     expect(callGatewayFromCli.mock.calls.some((call) => call[0] === "cron.run")).toBe(true);
     expect(callGatewayFromCli.mock.calls.filter((call) => call[0] === "cron.runs").length).toBe(2);
 
-    callGatewayFromCli.mockImplementation(defaultGatewayRpcMock);
+    callGatewayFromCli.mockImplementation(defaultGatewayMock);
   });
 
   it("exits non-zero when timeout verification finds failed run", async () => {
     callGatewayFromCli.mockClear();
     let runsCallCount = 0;
-    callGatewayFromCli.mockImplementation(async (method: string) => {
+    callGatewayFromCli.mockImplementation((async (method: string) => {
       if (method === "cron.list") {
         return { jobs: [] };
       }
@@ -617,8 +617,8 @@ describe("cron cli", () => {
       if (method === "cron.run") {
         throw new Error("gateway timeout after 30000ms");
       }
-      return defaultGatewayRpcMock(method, {}, undefined);
-    });
+      return defaultGatewayMock(method, {}, undefined);
+    }) as never);
 
     const program = buildProgram();
     await expect(
@@ -630,12 +630,12 @@ describe("cron cli", () => {
       ),
     ).rejects.toThrow("__exit__:1");
 
-    callGatewayFromCli.mockImplementation(defaultGatewayRpcMock);
+    callGatewayFromCli.mockImplementation(defaultGatewayMock);
   });
 
   it("fails preflight when announce delivery channel is missing", async () => {
     callGatewayFromCli.mockClear();
-    callGatewayFromCli.mockImplementation(async (method: string) => {
+    callGatewayFromCli.mockImplementation((async (method: string) => {
       if (method === "cron.list") {
         return {
           jobs: [
@@ -658,8 +658,8 @@ describe("cron cli", () => {
       if (method === "cron.run") {
         return { ok: true, ran: true };
       }
-      return defaultGatewayRpcMock(method, {}, undefined);
-    });
+      return defaultGatewayMock(method, {}, undefined);
+    }) as never);
 
     const program = buildProgram();
     await expect(program.parseAsync(["cron", "run", "job-1"], { from: "user" })).rejects.toThrow(
@@ -667,6 +667,6 @@ describe("cron cli", () => {
     );
     expect(callGatewayFromCli.mock.calls.some((call) => call[0] === "cron.run")).toBe(false);
 
-    callGatewayFromCli.mockImplementation(defaultGatewayRpcMock);
+    callGatewayFromCli.mockImplementation(defaultGatewayMock);
   });
 });

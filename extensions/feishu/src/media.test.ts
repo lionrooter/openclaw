@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { OpenClawConfig } from "openclaw/plugin-sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const createFeishuClientMock = vi.hoisted(() => vi.fn());
@@ -223,7 +224,7 @@ describe("sendMediaFeishu msg_type routing", () => {
     });
 
     const result = await downloadImageFeishu({
-      cfg: {} as any,
+      cfg: {} as OpenClawConfig,
       imageKey,
     });
 
@@ -244,7 +245,7 @@ describe("sendMediaFeishu msg_type routing", () => {
     });
 
     const result = await downloadMessageResourceFeishu({
-      cfg: {} as any,
+      cfg: {} as OpenClawConfig,
       messageId: "om_123",
       fileKey,
       type: "image",
@@ -258,7 +259,7 @@ describe("sendMediaFeishu msg_type routing", () => {
   it("rejects invalid image keys before calling feishu api", async () => {
     await expect(
       downloadImageFeishu({
-        cfg: {} as any,
+        cfg: {} as OpenClawConfig,
         imageKey: "a/../../bad",
       }),
     ).rejects.toThrow("invalid image_key");
@@ -269,7 +270,7 @@ describe("sendMediaFeishu msg_type routing", () => {
   it("rejects invalid file keys before calling feishu api", async () => {
     await expect(
       downloadMessageResourceFeishu({
-        cfg: {} as any,
+        cfg: {} as OpenClawConfig,
         messageId: "om_123",
         fileKey: "x/../../bad",
         type: "file",

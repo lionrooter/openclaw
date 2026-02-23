@@ -601,8 +601,6 @@ export type ToolsConfig = {
   exec?: ExecToolConfig;
   /** Filesystem tool path guards. */
   fs?: FsToolsConfig;
-  /** Runtime loop detection for repetitive/ stuck tool-call patterns. */
-  loopDetection?: ToolLoopDetectionConfig;
   /** Codex delegate tool defaults. */
   codexDelegate?: CodexDelegateConfig;
   /** Sub-agent tool policy defaults (deny wins). */

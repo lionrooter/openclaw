@@ -1,8 +1,5 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import type { FollowupRun } from "./queue.js";
-import type { TypingSignaler } from "./typing-mode.js";
-import { resolveAgentModelFallbacksOverride } from "../../agents/agent-scope.js";
 import { runCliAgent } from "../../agents/cli-runner.js";
 import { getCliSessionId } from "../../agents/cli-session.js";
 import { runWithModelFallback } from "../../agents/model-fallback.js";
@@ -39,7 +36,9 @@ import {
   resolveModelFallbackOptions,
 } from "./agent-runner-utils.js";
 import { type BlockReplyPipeline } from "./block-reply-pipeline.js";
+import type { FollowupRun } from "./queue.js";
 import { createBlockReplyDeliveryHandler } from "./reply-delivery.js";
+import type { TypingSignaler } from "./typing-mode.js";
 
 export type RuntimeFallbackAttempt = {
   provider: string;

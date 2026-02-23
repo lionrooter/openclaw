@@ -1,11 +1,13 @@
+import * as crypto from "crypto";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import type {
   ChannelAccountSnapshot,
   OpenClawConfig,
   ReplyPayload,
   RuntimeEnv,
 } from "openclaw/plugin-sdk";
-import * as crypto from "crypto";
-import * as fs from "fs";
 import {
   createReplyPrefixContext,
   createTypingCallbacks,
@@ -21,10 +23,8 @@ import {
   shouldAckReaction as shouldAckReactionGate,
   type HistoryEntry,
 } from "openclaw/plugin-sdk";
-import * as os from "os";
-import * as path from "path";
-import type { ZulipXCaseConfig } from "../types.js";
 import { getZulipRuntime } from "../runtime.js";
+import type { ZulipXCaseConfig } from "../types.js";
 import { resolveZulipAccount } from "./accounts.js";
 import {
   createZulipClient,

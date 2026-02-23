@@ -46,7 +46,7 @@ export const budgetHandlers: GatewayRequestHandlers = {
    */
   "budget.agent": async ({ respond, params }) => {
     const config = loadConfig();
-    const agentId = params?.agentId || resolveDefaultAgentId(config);
+    const agentId = (params?.agentId as string | undefined) || resolveDefaultAgentId(config);
     const days = typeof params?.days === "number" ? params.days : 7;
 
     try {
@@ -54,7 +54,7 @@ export const budgetHandlers: GatewayRequestHandlers = {
       respond(true, profile, undefined);
     } catch (err) {
       respond(false, undefined, {
-        code: -1,
+        code: "-1",
         message: `Failed to load cost profile: ${formatErrorMessage(err)}`,
       });
     }
@@ -74,7 +74,7 @@ export const budgetHandlers: GatewayRequestHandlers = {
       respond(true, snapshot, undefined);
     } catch (err) {
       respond(false, undefined, {
-        code: -1,
+        code: "-1",
         message: `Failed to load fleet cost snapshot: ${formatErrorMessage(err)}`,
       });
     }
@@ -95,7 +95,7 @@ export const budgetHandlers: GatewayRequestHandlers = {
       respond(true, { lines, snapshot }, undefined);
     } catch (err) {
       respond(false, undefined, {
-        code: -1,
+        code: "-1",
         message: `Failed to load fleet summary: ${formatErrorMessage(err)}`,
       });
     }
@@ -108,14 +108,14 @@ export const budgetHandlers: GatewayRequestHandlers = {
   "budget.check": async ({ respond, params }) => {
     const config = loadConfig();
     const category = (params?.category as WorkCategory) || "maintenance";
-    const agentId = params?.agentId || resolveDefaultAgentId(config);
+    const agentId = (params?.agentId as string | undefined) || resolveDefaultAgentId(config);
 
     try {
       const decision = await checkBudgetGates({ category, agentId, config });
       respond(true, decision, undefined);
     } catch (err) {
       respond(false, undefined, {
-        code: -1,
+        code: "-1",
         message: `Budget check failed: ${formatErrorMessage(err)}`,
       });
     }
@@ -127,7 +127,7 @@ export const budgetHandlers: GatewayRequestHandlers = {
    */
   "budget.embeddings": async ({ respond, params }) => {
     const config = loadConfig();
-    const agentId = params?.agentId || resolveDefaultAgentId(config);
+    const agentId = (params?.agentId as string | undefined) || resolveDefaultAgentId(config);
     const days = typeof params?.days === "number" ? params.days : 7;
 
     try {
@@ -135,7 +135,7 @@ export const budgetHandlers: GatewayRequestHandlers = {
       respond(true, { agentId, days, ...summary }, undefined);
     } catch (err) {
       respond(false, undefined, {
-        code: -1,
+        code: "-1",
         message: `Failed to load embedding costs: ${formatErrorMessage(err)}`,
       });
     }

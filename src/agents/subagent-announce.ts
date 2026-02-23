@@ -1161,7 +1161,6 @@ export async function runSubagentAnnounceFlow(params: {
     if (findings.length > MAX_FINDINGS_CHARS) {
       findings = `${findings.slice(0, MAX_FINDINGS_CHARS)}\n...(truncated)`;
     }
-    let completionMessage = "";
     let triggerMessage = "";
 
     let requesterIsSubagent = requesterDepth >= 1;

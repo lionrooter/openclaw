@@ -5,7 +5,7 @@ import { DEFAULT_AGENT_WORKSPACE_DIR, ensureAgentWorkspace } from "../agents/wor
 import { type OpenClawConfig, createConfigIO, writeConfigFile } from "../config/config.js";
 import { formatConfigPath, logConfigUpdated } from "../config/logging.js";
 import { resolveSessionTranscriptsDir } from "../config/sessions.js";
-import { defaultRuntime } from "../runtime.js";
+import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
 import { shortenHomePath } from "../utils.js";
 
 async function readConfigFileRaw(configPath: string): Promise<{

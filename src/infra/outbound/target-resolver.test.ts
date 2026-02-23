@@ -90,7 +90,7 @@ describe("resolveMessagingTarget (directory fallback)", () => {
       return {
         messaging: {
           targetResolver: {
-            looksLikeId: (raw) => {
+            looksLikeId: (raw: string) => {
               const trimmed = raw.trim();
               if (/^(stream:|dm:)/i.test(trimmed)) {
                 return true;

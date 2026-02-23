@@ -1,7 +1,7 @@
-import { Type } from "@sinclair/typebox";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { Type } from "@sinclair/typebox";
 import type { OpenClawConfig } from "../../config/config.js";
 import { stringEnum } from "../schema/typebox.js";
 import { type AnyAgentTool, ToolInputError, jsonResult, readStringParam } from "./common.js";

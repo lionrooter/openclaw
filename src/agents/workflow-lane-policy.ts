@@ -1,6 +1,6 @@
 import type { OpenClawConfig } from "../config/config.js";
-import type { WorkflowLaneConfig, WorkflowLaneDomain } from "../config/types.workflow-lane.js";
 import { loadConfig } from "../config/config.js";
+import type { WorkflowLaneConfig, WorkflowLaneDomain } from "../config/types.workflow-lane.js";
 import { resolveAgentConfig } from "./agent-scope.js";
 import { normalizeToolName } from "./tool-policy.js";
 import { resolveWorkflowLaneDomainForAgent } from "./workflow-lane-presets.js";

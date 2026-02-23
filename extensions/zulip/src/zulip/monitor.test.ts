@@ -112,7 +112,11 @@ describe("processZulipUploads", () => {
     expect(saveMedia).toHaveBeenCalledTimes(1);
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(result.attachmentInfo).toContain("prepared for model analysis");
-    const saveArg = saveMedia.mock.calls[0][0];
+    const saveArg = (
+      saveMedia.mock.calls[0] as unknown as [
+        { buffer: { length: number }; contentType: string; fileName: string },
+      ]
+    )[0];
     expect(saveArg.fileName).toBe("BreakfastLiev");
     expect(saveArg.contentType).toBe("image/png");
     expect(saveArg.buffer.length).toBe(4);

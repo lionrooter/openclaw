@@ -414,7 +414,18 @@ const ToolLoopDetectionDetectorSchema = z
   .strict()
   .optional();
 
-const ToolLoopDetectionSchema = z
+const ToolCodexDelegateSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    command: z.string().optional(),
+    model: z.string().optional(),
+    maxTimeoutMs: z.number().int().positive().optional(),
+    allowDirs: z.array(z.string()).optional(),
+  })
+  .strict()
+  .optional();
+
+export const ToolLoopDetectionSchema = z
   .object({
     enabled: z.boolean().optional(),
     historySize: z.number().int().positive().optional(),
@@ -449,38 +460,6 @@ const ToolLoopDetectionSchema = z
       });
     }
   })
-  .optional();
-
-const ToolCodexDelegateSchema = z
-  .object({
-    enabled: z.boolean().optional(),
-    command: z.string().optional(),
-    model: z.string().optional(),
-    maxTimeoutMs: z.number().int().positive().optional(),
-    allowDirs: z.array(z.string()).optional(),
-  })
-  .strict()
-  .optional();
-
-const ToolLoopDetectionDetectorSchema = z
-  .object({
-    genericRepeat: z.boolean().optional(),
-    knownPollNoProgress: z.boolean().optional(),
-    pingPong: z.boolean().optional(),
-  })
-  .strict()
-  .optional();
-
-export const ToolLoopDetectionSchema = z
-  .object({
-    enabled: z.boolean().optional(),
-    historySize: z.number().int().positive().optional(),
-    warningThreshold: z.number().int().positive().optional(),
-    criticalThreshold: z.number().int().positive().optional(),
-    globalCircuitBreakerThreshold: z.number().int().positive().optional(),
-    detectors: ToolLoopDetectionDetectorSchema,
-  })
-  .strict()
   .optional();
 
 export const AgentSandboxSchema = z

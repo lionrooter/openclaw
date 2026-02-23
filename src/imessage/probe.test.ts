@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { IMessageRpcClient } from "./client.js";
 import { probeIMessage } from "./probe.js";
 
 const detectBinaryMock = vi.hoisted(() => vi.fn());
@@ -48,7 +49,7 @@ describe("probeIMessage", () => {
       stop: vi.fn(async () => {}),
       start: vi.fn(async () => {}),
       waitForClose: vi.fn(async () => {}),
-    } as unknown as ReturnType<typeof spawn>);
+    } as unknown as IMessageRpcClient);
 
     const result = await probeIMessage(1000, { cliPath: "imsg" });
     expect(result.ok).toBe(false);

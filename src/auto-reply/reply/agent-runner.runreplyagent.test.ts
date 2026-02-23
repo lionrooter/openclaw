@@ -3,12 +3,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionEntry } from "../../config/sessions.js";
+import * as sessions from "../../config/sessions.js";
 import type { TypingMode } from "../../config/types.js";
 import { withStateDirEnv } from "../../test-helpers/state-dir-env.js";
 import type { TemplateContext } from "../templating.js";
 import type { GetReplyOptions } from "../types.js";
 import type { FollowupRun, QueueSettings } from "./queue.js";
-import * as sessions from "../../config/sessions.js";
 import { createMockTypingController } from "./test-helpers.js";
 
 type AgentRunParams = {
@@ -18,6 +18,7 @@ type AgentRunParams = {
   onBlockReply?: (payload: { text?: string; mediaUrls?: string[] }) => Promise<void> | void;
   onToolResult?: (payload: { text?: string; mediaUrls?: string[] }) => Promise<void> | void;
   onAgentEvent?: (evt: { stream: string; data: Record<string, unknown> }) => void;
+  groupId?: string;
 };
 
 type EmbeddedRunParams = {
@@ -561,7 +562,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
 
     const baseRun = createBaseRun({
       storePath: "/tmp/sessions/sessions.json",
-      sessionEntry: {},
+      sessionEntry: {} as SessionEntry,
       runOverrides: {
         groupId: expectedGroupId,
       },
@@ -570,7 +571,7 @@ describe("runReplyAgent typing (heartbeat)", () => {
       baseRun,
       storePath: "/tmp/sessions/sessions.json",
       sessionKey: "main",
-      sessionEntry: {},
+      sessionEntry: {} as SessionEntry,
       commandBody: "test",
     });
 

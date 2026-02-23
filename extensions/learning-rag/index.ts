@@ -16,9 +16,9 @@
  * `owner` property on Note nodes.
  */
 
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import neo4j from "neo4j-driver";
 import OpenAI from "openai";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 
 // ============================================================================
 // Types

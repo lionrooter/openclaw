@@ -1,9 +1,9 @@
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { OpenClawConfig } from "../../config/config.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
-import type { FailoverReason } from "./types.js";
 import { formatSandboxToolPolicyBlockedMessage } from "../sandbox.js";
 import { stableStringify } from "../stable-stringify.js";
+import type { FailoverReason } from "./types.js";
 
 const log = createSubsystemLogger("errors");
 
@@ -551,6 +551,21 @@ export function formatAssistantErrorText(
 const CLI_PROTOCOL_JSON_RE = /^\s*\{"type"\s*:\s*"(?:system|init|result)"[^}]*\}\s*$/m;
 const CLI_INIT_FIELDS_RE = /\{"type"\s*:\s*"system"\s*,\s*"subtype"\s*:\s*"init"/;
 
+// Returns true when billing text should be rewritten to the user-facing billing message.
+// Only rewrites when the text looks explicitly like a billing error (API payload, HTTP error,
+// or has the billing prefix), not when it's just conversational text mentioning billing.
+function shouldRewriteBillingText(raw: string): boolean {
+  if (!isBillingErrorMessage(raw)) {
+    return false;
+  }
+  return (
+    isRawApiErrorPayload(raw) ||
+    isLikelyHttpErrorText(raw) ||
+    ERROR_PREFIX_RE.test(raw) ||
+    BILLING_ERROR_HEAD_RE.test(raw)
+  );
+}
+
 export function sanitizeUserFacingText(text: string, opts?: { errorContext?: boolean }): string {
   if (!text) {
     return text;
@@ -621,7 +636,6 @@ export function sanitizeUserFacingText(text: string, opts?: { errorContext?: boo
   if (shouldRewriteBillingText(trimmed)) {
     return BILLING_ERROR_USER_MESSAGE;
   }
-
 
   // Strip leading blank lines (including whitespace-only lines) without clobbering indentation on
   // the first content line (e.g. markdown/code blocks).
