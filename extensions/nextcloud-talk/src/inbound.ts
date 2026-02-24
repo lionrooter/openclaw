@@ -25,7 +25,7 @@ import {
 import { resolveNextcloudTalkRoomKind } from "./room-info.js";
 import { getNextcloudTalkRuntime } from "./runtime.js";
 import { sendMessageNextcloudTalk } from "./send.js";
-import type { CoreConfig, GroupPolicy, NextcloudTalkInboundMessage } from "./types.js";
+import type { CoreConfig, NextcloudTalkInboundMessage } from "./types.js";
 
 const CHANNEL_ID = "nextcloud-talk" as const;
 
@@ -83,7 +83,7 @@ export async function handleNextcloudTalkInbound(params: {
       providerConfigPresent:
         ((config.channels as Record<string, unknown> | undefined)?.["nextcloud-talk"] ??
           undefined) !== undefined,
-      groupPolicy: account.config.groupPolicy as GroupPolicy | undefined,
+      groupPolicy: account.config.groupPolicy,
       defaultGroupPolicy,
     });
   warnMissingProviderGroupPolicyFallbackOnce({

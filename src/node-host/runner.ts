@@ -207,7 +207,12 @@ export async function runNodeHost(opts: NodeHostRunOptions): Promise<void> {
       if (!payload) {
         return;
       }
-      void handleInvoke(payload, client, skillBins);
+      void handleInvoke(payload, client, skillBins).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error(
+          `node host invoke failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
     },
     onConnectError: (err) => {
       // keep retrying (handled by GatewayClient)

@@ -268,7 +268,7 @@ async function cleanupNewBitable(
         });
         cleanedFields++;
       } catch (err) {
-        logger.debug(`Failed to rename primary field: ${err}`);
+        logger.debug(`Failed to rename primary field: ${String(err)}`);
       }
     }
 
@@ -289,7 +289,7 @@ async function cleanupNewBitable(
           });
           cleanedFields++;
         } catch (err) {
-          logger.debug(`Failed to delete default field ${field.field_name}: ${err}`);
+          logger.debug(`Failed to delete default field ${field.field_name}: ${String(err)}`);
         }
       }
     }
@@ -323,7 +323,9 @@ async function cleanupNewBitable(
             });
             cleanedRows++;
           } catch (err) {
-            logger.debug(`Failed to delete empty row ${recordId}: ${err}`);
+            logger.debug(
+              `Failed to delete empty row ${recordId}: ${err instanceof Error ? err.message : String(err)}`,
+            );
           }
         }
       }
@@ -372,7 +374,7 @@ async function createApp(
       }
     }
   } catch (err) {
-    log.debug(`Cleanup failed (non-critical): ${err}`);
+    log.debug(`Cleanup failed (non-critical): ${err instanceof Error ? err.message : String(err)}`);
   }
 
   return {

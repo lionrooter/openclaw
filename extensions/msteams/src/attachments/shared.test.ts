@@ -170,7 +170,9 @@ describe("safeFetch", () => {
     const rebindingResolve = async () => {
       callCount++;
       // First call (initial URL) resolves to public IP
-      if (callCount === 1) return { address: "13.107.136.10" };
+      if (callCount === 1) {
+        return { address: "13.107.136.10" };
+      }
       // Second call (redirect target) resolves to private IP
       return { address: "169.254.169.254" };
     };

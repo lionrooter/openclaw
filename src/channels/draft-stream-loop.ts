@@ -57,7 +57,7 @@ export function createDraftStreamLoop(params: {
     }
     const delay = Math.max(0, params.throttleMs - (Date.now() - lastSentAt));
     timer = setTimeout(() => {
-      void flush();
+      void flush().catch(() => {});
     }, delay);
   };
 
@@ -72,7 +72,7 @@ export function createDraftStreamLoop(params: {
         return;
       }
       if (!timer && Date.now() - lastSentAt >= params.throttleMs) {
-        void flush();
+        void flush().catch(() => {});
         return;
       }
       schedule();

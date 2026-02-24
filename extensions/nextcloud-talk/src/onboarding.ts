@@ -23,7 +23,7 @@ function setNextcloudTalkDmPolicy(cfg: CoreConfig, dmPolicy: DmPolicy): CoreConf
   const existingConfig = cfg.channels?.["nextcloud-talk"];
   const existingAllowFrom: string[] = (existingConfig?.allowFrom ?? []).map((x) => String(x));
   const allowFrom: string[] =
-    dmPolicy === "open" ? (addWildcardAllowFrom(existingAllowFrom) as string[]) : existingAllowFrom;
+    dmPolicy === "open" ? addWildcardAllowFrom(existingAllowFrom) : existingAllowFrom;
 
   const newNextcloudTalkConfig = {
     ...existingConfig,

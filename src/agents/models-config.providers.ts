@@ -653,10 +653,10 @@ async function buildOllamaProvider(configuredBaseUrl?: string): Promise<Provider
 async function buildHuggingfaceProvider(apiKey?: string): Promise<ProviderConfig> {
   // Resolve env var name to value for discovery (GET /v1/models requires Bearer token).
   const resolvedSecret =
-    apiKey?.trim() !== ""
-      ? /^[A-Z][A-Z0-9_]*$/.test(apiKey!.trim())
-        ? (process.env[apiKey!.trim()] ?? "").trim()
-        : apiKey!.trim()
+    apiKey != null && apiKey.trim() !== ""
+      ? /^[A-Z][A-Z0-9_]*$/.test(apiKey.trim())
+        ? (process.env[apiKey.trim()] ?? "").trim()
+        : apiKey.trim()
       : "";
   const models =
     resolvedSecret !== ""

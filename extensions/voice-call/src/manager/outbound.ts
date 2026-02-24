@@ -264,11 +264,15 @@ export async function speakInitialMessage(
   if (mode === "notify") {
     const delaySec = ctx.config.outbound.notifyHangupDelaySec;
     console.log(`[voice-call] Notify mode: auto-hangup in ${delaySec}s for call ${call.callId}`);
-    setTimeout(async () => {
+    setTimeout(() => {
       const currentCall = ctx.activeCalls.get(call.callId);
       if (currentCall && !TerminalStates.has(currentCall.state)) {
         console.log(`[voice-call] Notify mode: hanging up call ${call.callId}`);
-        await endCall(ctx, call.callId);
+        endCall(ctx, call.callId).catch((err) => {
+          console.error(
+            `[voice-call] Notify hangup failed for ${call.callId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
       }
     }, delaySec * 1000);
   }
@@ -316,7 +320,7 @@ export async function continueCall(
         : 1;
 
     call.metadata = {
-      ...(call.metadata ?? {}),
+      ...call.metadata,
       turnCount,
       lastTurnLatencyMs,
       lastTurnListenWaitMs,

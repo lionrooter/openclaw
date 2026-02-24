@@ -35,7 +35,7 @@ export function startMaxDurationTimer(params: {
     `[voice-call] Starting max duration timer (${params.ctx.config.maxDurationSeconds}s) for call ${params.callId}`,
   );
 
-  const timer = setTimeout(async () => {
+  const timer = setTimeout(() => {
     params.ctx.maxDurationTimers.delete(params.callId);
     const call = params.ctx.activeCalls.get(params.callId);
     if (call && !TerminalStates.has(call.state)) {
@@ -44,7 +44,11 @@ export function startMaxDurationTimer(params: {
       );
       call.endReason = "timeout";
       persistCallRecord(params.ctx.storePath, call);
-      await params.onTimeout(params.callId);
+      params.onTimeout(params.callId).catch((err) => {
+        console.error(
+          `[voice-call] Max duration timeout handler failed for ${params.callId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
     }
   }, maxDurationMs);
 

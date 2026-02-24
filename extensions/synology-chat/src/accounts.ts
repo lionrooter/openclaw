@@ -6,14 +6,19 @@
 import type { SynologyChatChannelConfig, ResolvedSynologyChatAccount } from "./types.js";
 
 /** Extract the channel config from the full OpenClaw config object. */
-function getChannelConfig(cfg: any): SynologyChatChannelConfig | undefined {
-  return cfg?.channels?.["synology-chat"];
+function getChannelConfig(cfg: Record<string, unknown>): SynologyChatChannelConfig | undefined {
+  const channels = cfg?.channels as Record<string, unknown> | undefined;
+  return channels?.["synology-chat"] as SynologyChatChannelConfig | undefined;
 }
 
 /** Parse allowedUserIds from string or array to string[]. */
 function parseAllowedUserIds(raw: string | string[] | undefined): string[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return raw.filter(Boolean);
+  if (!raw) {
+    return [];
+  }
+  if (Array.isArray(raw)) {
+    return raw.filter(Boolean);
+  }
   return raw
     .split(",")
     .map((s) => s.trim())
@@ -24,9 +29,11 @@ function parseAllowedUserIds(raw: string | string[] | undefined): string[] {
  * List all configured account IDs for this channel.
  * Returns ["default"] if there's a base config, plus any named accounts.
  */
-export function listAccountIds(cfg: any): string[] {
+export function listAccountIds(cfg: Record<string, unknown>): string[] {
   const channelCfg = getChannelConfig(cfg);
-  if (!channelCfg) return [];
+  if (!channelCfg) {
+    return [];
+  }
 
   const ids = new Set<string>();
 
@@ -50,7 +57,10 @@ export function listAccountIds(cfg: any): string[] {
  * Resolve a specific account by ID with full defaults applied.
  * Falls back to env vars for the "default" account.
  */
-export function resolveAccount(cfg: any, accountId?: string | null): ResolvedSynologyChatAccount {
+export function resolveAccount(
+  cfg: Record<string, unknown>,
+  accountId?: string | null,
+): ResolvedSynologyChatAccount {
   const channelCfg = getChannelConfig(cfg) ?? {};
   const id = accountId || "default";
 

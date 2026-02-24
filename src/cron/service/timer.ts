@@ -115,7 +115,7 @@ const ERROR_BACKOFF_SCHEDULE_MS = [
 
 function errorBackoffMs(consecutiveErrors: number): number {
   const idx = Math.min(consecutiveErrors - 1, ERROR_BACKOFF_SCHEDULE_MS.length - 1);
-  return ERROR_BACKOFF_SCHEDULE_MS[Math.max(0, idx)];
+  return ERROR_BACKOFF_SCHEDULE_MS[Math.max(0, idx)] ?? ERROR_BACKOFF_SCHEDULE_MS[0];
 }
 
 function resolveDeliveryStatus(params: { job: CronJob; delivered?: boolean }): CronDeliveryStatus {

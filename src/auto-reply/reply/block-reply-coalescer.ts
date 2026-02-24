@@ -79,8 +79,9 @@ export function createBlockReplyCoalescer(params: {
     const text = payload.text ?? "";
     const hasText = text.trim().length > 0;
     if (hasMedia) {
-      void flush({ force: true });
-      void onFlush(payload);
+      // Chain media delivery after text flush to prevent out-of-order delivery.
+      const flushPromise = flush({ force: true });
+      void flushPromise.then(() => onFlush(payload));
       return;
     }
     if (!hasText) {
@@ -90,13 +91,14 @@ export function createBlockReplyCoalescer(params: {
     // When flushOnEnqueue is set (chunkMode="newline"), each enqueued payload is treated
     // as a separate paragraph and flushed immediately so delivery matches streaming boundaries.
     if (flushOnEnqueue) {
-      if (bufferText) {
+      // Chain buffer update after prior flush to prevent payload loss.
+      const prior = bufferText ? flush({ force: true }) : Promise.resolve();
+      void prior.then(() => {
+        bufferReplyToId = payload.replyToId;
+        bufferAudioAsVoice = payload.audioAsVoice;
+        bufferText = text;
         void flush({ force: true });
-      }
-      bufferReplyToId = payload.replyToId;
-      bufferAudioAsVoice = payload.audioAsVoice;
-      bufferText = text;
-      void flush({ force: true });
+      });
       return;
     }
 

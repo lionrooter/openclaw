@@ -189,7 +189,7 @@ const saveSessionToMemory: HookHandler = async (event) => {
     await fs.mkdir(memoryDir, { recursive: true });
 
     // Get today's date for filename
-    const now = new Date(event.timestamp);
+    const now = new Date(event.timestamp ?? Date.now());
     const dateStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
 
     // Generate descriptive slug from session using LLM

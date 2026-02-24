@@ -327,7 +327,12 @@ function pickAmbiguousMatch(
     entry,
     rank: typeof entry.rank === "number" ? entry.rank : 0,
   }));
-  const bestRank = Math.max(...ranked.map((item) => item.rank));
+  let bestRank = -Infinity;
+  for (const item of ranked) {
+    if (item.rank > bestRank) {
+      bestRank = item.rank;
+    }
+  }
   const best = ranked.find((item) => item.rank === bestRank)?.entry;
   return best ?? entries[0] ?? null;
 }

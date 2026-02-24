@@ -23,7 +23,7 @@ import { feishuOutbound } from "./outbound.js";
 import { resolveFeishuGroupToolPolicy } from "./policy.js";
 import { probeFeishu } from "./probe.js";
 import { sendMessageFeishu } from "./send.js";
-import { normalizeFeishuTarget, looksLikeFeishuId, formatFeishuTarget } from "./targets.js";
+import { normalizeFeishuTarget, looksLikeFeishuId } from "./targets.js";
 import type { ResolvedFeishuAccount, FeishuConfig } from "./types.js";
 
 const meta: ChannelMeta = {
@@ -231,7 +231,9 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
         groupPolicy: feishuCfg?.groupPolicy,
         defaultGroupPolicy,
       });
-      if (groupPolicy !== "open") return [];
+      if (groupPolicy !== "open") {
+        return [];
+      }
       return [
         `- Feishu[${account.accountId}] groups: groupPolicy="open" allows any member to trigger (mention-gated). Set channels.feishu.groupPolicy="allowlist" + channels.feishu.groupAllowFrom to restrict senders.`,
       ];

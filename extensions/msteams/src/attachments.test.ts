@@ -44,7 +44,7 @@ const CONTENT_TYPE_IMAGE_PNG = "image/png";
 const CONTENT_TYPE_APPLICATION_PDF = "application/pdf";
 const CONTENT_TYPE_TEXT_HTML = "text/html";
 const CONTENT_TYPE_TEAMS_FILE_DOWNLOAD_INFO = "application/vnd.microsoft.teams.file.download.info";
-const REDIRECT_STATUS_CODES = [301, 302, 303, 307, 308];
+const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
 const MAX_REDIRECT_HOPS = 5;
 type RemoteMediaFetchParams = {
   url: string;
@@ -706,7 +706,7 @@ describe("msteams attachments", () => {
         let currentUrl = params.url;
         for (let i = 0; i < MAX_REDIRECT_HOPS; i += 1) {
           const res = await fetchFn(currentUrl, { redirect: "manual" });
-          if (REDIRECT_STATUS_CODES.includes(res.status)) {
+          if (REDIRECT_STATUS_CODES.has(res.status)) {
             const location = res.headers.get("location");
             if (!location) {
               throw new Error("redirect missing location");
