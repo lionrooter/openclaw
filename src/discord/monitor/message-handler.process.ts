@@ -22,8 +22,8 @@ import {
   type StatusReactionAdapter,
 } from "../../channels/status-reactions.js";
 import { createTypingCallbacks } from "../../channels/typing.js";
-import { isDangerousNameMatchingEnabled } from "../../config/dangerous-name-matching.js";
 import type { ImageContent } from "../../commands/agent/types.js";
+import { isDangerousNameMatchingEnabled } from "../../config/dangerous-name-matching.js";
 import { resolveDiscordPreviewStreamMode } from "../../config/discord-preview-streaming.js";
 import { resolveMarkdownTableMode } from "../../config/markdown-tables.js";
 import { readSessionUpdatedAt, resolveStorePath } from "../../config/sessions.js";
