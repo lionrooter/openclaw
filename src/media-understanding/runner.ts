@@ -3,11 +3,6 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { resolveApiKeyForProvider } from "../agents/model-auth.js";
-import {
-  findModelInCatalog,
-  loadModelCatalog,
-  modelSupportsVision,
-} from "../agents/model-catalog.js";
 import type { MsgContext } from "../auto-reply/templating.js";
 import type { OpenClawConfig } from "../config/config.js";
 import {
@@ -704,41 +699,16 @@ export async function runCapability(params: {
     };
   }
 
-  // Skip image understanding when the primary model supports vision natively.
-  // The image will be injected directly into the model context instead.
-  const activeProvider = params.activeModel?.provider?.trim();
-  if (capability === "image" && activeProvider) {
-    const catalog = await loadModelCatalog({ config: cfg });
-    const entry = findModelInCatalog(catalog, activeProvider, params.activeModel?.model ?? "");
-    if (modelSupportsVision(entry)) {
-      if (shouldLogVerbose()) {
-        logVerbose("Skipping image understanding: primary model supports vision natively");
-      }
-      const model = params.activeModel?.model?.trim();
-      const reason = "primary model supports vision natively";
-      return {
-        outputs: [],
-        decision: {
-          capability,
-          outcome: "skipped",
-          attachments: selected.map((item) => {
-            const attempt = {
-              type: "provider" as const,
-              provider: activeProvider,
-              model: model || undefined,
-              outcome: "skipped" as const,
-              reason,
-            };
-            return {
-              attachmentIndex: item.index,
-              attempts: [attempt],
-              chosen: attempt,
-            };
-          }),
-        },
-      };
-    }
-  }
+  // Always generate an image description regardless of whether the primary model
+  // supports vision natively. This ensures:
+  // 1. CLI-based runners (which can't inject raw images) always get a text description
+  // 2. Non-vision models always get a text description
+  // 3. Vision models get both: the text description AND native image injection
+  // Previously this block skipped media understanding for vision models, assuming
+  // native image injection would always succeed. But CLI runners, sandbox failures,
+  // and extensionless file paths could silently fail, leaving the model with only
+  // a "[media attached: ...]" text tag and no actual image data — causing it to
+  // hallucinate about image content it never saw.
 
   const entries = resolveModelEntries({
     cfg,
