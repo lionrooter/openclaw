@@ -33,14 +33,13 @@ export async function ensureSandboxWorkspace(
       const src = path.join(seed, name);
       const dest = path.join(workspaceDir, name);
       try {
-        await fs.access(dest);
+        // Always overwrite sandbox copies from the agent workspace source
+        // to prevent drift when source files (vault) are updated.
+        // Previous behavior used flag:"wx" which never refreshed stale copies.
+        const content = await fs.readFile(src, "utf-8");
+        await fs.writeFile(dest, content, { encoding: "utf-8" });
       } catch {
-        try {
-          const content = await fs.readFile(src, "utf-8");
-          await fs.writeFile(dest, content, { encoding: "utf-8", flag: "wx" });
-        } catch {
-          // ignore missing seed file
-        }
+        // ignore missing seed file
       }
     }
   }
