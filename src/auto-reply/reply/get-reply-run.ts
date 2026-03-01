@@ -15,6 +15,7 @@ import {
   type SessionEntry,
   updateSessionStore,
 } from "../../config/sessions.js";
+import { normalizeChatType } from "../../channels/chat-type.js";
 import { logVerbose } from "../../globals.js";
 import { clearCommandLane, getQueueSize } from "../../process/command-queue.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
@@ -219,6 +220,25 @@ export async function runPreparedReply(
     workspaceDir,
     sessionStore,
   } = params;
+  const normalizeZulipDmGroupId = (value: string | undefined) => {
+    if (!value) return undefined;
+    const trimmed = value.trim().toLowerCase();
+    if (!trimmed) return undefined;
+    const withoutRoot = trimmed.replace(/^(?:zulip|user):/i, "");
+    const withoutUser = withoutRoot.replace(/^user:/i, "");
+    return withoutUser.trim().toLowerCase() || undefined;
+  };
+  const resolveFollowupGroupId = () => {
+    const resolvedBySession = resolveGroupSessionKey(sessionCtx)?.id;
+    if (resolvedBySession) {
+      return resolvedBySession;
+    }
+    const normalizedChatType = normalizeChatType(sessionCtx.ChatType);
+    if (sessionCtx.Provider?.trim().toLowerCase() !== "zulip" || normalizedChatType !== "direct") {
+      return undefined;
+    }
+    return normalizeZulipDmGroupId(sessionCtx.From) ?? normalizeZulipDmGroupId(sessionCtx.SenderId);
+  };
   let {
     sessionEntry,
     resolvedThinkLevel,
@@ -475,7 +495,7 @@ export async function runPreparedReply(
         provider: ctx.Surface ?? ctx.Provider ?? sessionCtx.Provider,
       }),
       agentAccountId: sessionCtx.AccountId,
-      groupId: resolveGroupSessionKey(sessionCtx)?.id ?? undefined,
+      groupId: resolveFollowupGroupId(),
       groupChannel: sessionCtx.GroupChannel?.trim() ?? sessionCtx.GroupSubject?.trim(),
       groupSpace: sessionCtx.GroupSpace?.trim() ?? undefined,
       senderId: sessionCtx.SenderId?.trim() || undefined,
