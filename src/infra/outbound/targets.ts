@@ -1,4 +1,5 @@
 import { normalizeChatType, type ChatType } from "../../channels/chat-type.js";
+import { getChannelPlugin } from "../../channels/plugins/index.js";
 import type { ChannelOutboundTargetMode } from "../../channels/plugins/types.js";
 import { formatCliCommand } from "../../cli/command-format.js";
 import type { OpenClawConfig } from "../../config/config.js";
@@ -289,7 +290,7 @@ export function resolveHeartbeatDeliveryTarget(params: {
     if (channelPlugin) {
       const accountIds = channelPlugin.config.listAccountIds(cfg);
       if (accountIds.length > 0) {
-        const hasEnabledAccount = accountIds.some((id) => {
+        const hasEnabledAccount = accountIds.some((id: string) => {
           const account = channelPlugin.config.resolveAccount(cfg, id);
           return channelPlugin.config.isEnabled
             ? channelPlugin.config.isEnabled(account, cfg)

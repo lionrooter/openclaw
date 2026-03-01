@@ -1414,7 +1414,9 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
     const configAllowFrom = normalizeAllowList(account.config.allowFrom ?? []);
     const configGroupAllowFrom = normalizeAllowList(account.config.groupAllowFrom ?? []);
     const storeAllowFrom = normalizeAllowList(
-      await core.channel.pairing.readAllowFromStore("zulip").catch(() => []),
+      await core.channel.pairing
+        .readAllowFromStore({ channel: "zulip", accountId: account.accountId })
+        .catch(() => []),
     );
     const effectiveAllowFrom = Array.from(new Set([...configAllowFrom, ...storeAllowFrom]));
     const effectiveGroupAllowFrom = Array.from(
@@ -1464,6 +1466,7 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
         if (dmPolicy === "pairing") {
           const { code, created } = await core.channel.pairing.upsertPairingRequest({
             channel: "zulip",
+            accountId: account.accountId,
             id: String(senderId),
             meta: { name: senderName, email: senderEmail },
           });

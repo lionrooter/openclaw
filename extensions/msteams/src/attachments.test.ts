@@ -93,7 +93,7 @@ const fetchRemoteMediaMock = vi.fn(async (params: RemoteMediaFetchParams) => {
       throw new Error(`Blocked hostname (not in allowlist): ${currentUrl}`);
     }
     const res = await fetchFn(currentUrl, { redirect: "manual" });
-    if (REDIRECT_STATUS_CODES.includes(res.status)) {
+    if (REDIRECT_STATUS_CODES.has(res.status)) {
       const location = res.headers.get("location");
       if (!location) {
         throw new Error("redirect missing location");

@@ -715,6 +715,8 @@ describe("cron cli", () => {
     expect(callGatewayFromCli.mock.calls.some((call) => call[0] === "cron.run")).toBe(false);
 
     callGatewayFromCli.mockImplementation(defaultGatewayMock);
+  });
+
   it("patches failure alert settings on cron edit", async () => {
     callGatewayFromCli.mockClear();
 

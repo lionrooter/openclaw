@@ -272,6 +272,15 @@ describe("runPreparedReply media-only handling", () => {
           OriginatingChannel: "zulip",
           OriginatingTo: "DM-target",
           MediaPath: "/tmp/input.png",
+        },
+      }),
+    );
+
+    expect(result).toEqual({ text: "ok" });
+    const call = vi.mocked(runReplyAgent).mock.calls[0]?.[0];
+    expect(call?.followupRun.run.groupId).toBe("alice");
+  });
+
   it("uses inbound origin channel for run messageProvider", async () => {
     await runPreparedReply(
       baseParams({
@@ -297,9 +306,6 @@ describe("runPreparedReply media-only handling", () => {
       }),
     );
 
-    expect(result).toEqual({ text: "ok" });
-    const call = vi.mocked(runReplyAgent).mock.calls[0]?.[0];
-    expect(call?.followupRun.run.groupId).toBe("alice");
     const call = vi.mocked(runReplyAgent).mock.calls[0]?.[0];
     expect(call?.followupRun.run.messageProvider).toBe("webchat");
   });

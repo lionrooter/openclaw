@@ -326,10 +326,41 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     });
     const strict = merged.filter((entry) => entry.score >= minScore);
     if (strict.length > 0 || keywordResults.length === 0) {
-      return strict.slice(0, maxResults);
+      const ownResults = strict.slice(0, maxResults);
+
+      // Cross-agent sharing (piece #19): also search shared memory pool
+      const sharedResults = this.searchSharedPool(cleaned, maxResults);
+      if (sharedResults.length === 0) {
+        return ownResults;
+      }
+
+      // Merge shared results into own results, keeping total under maxResults
+      // Reserve at most 2 slots for shared memory to avoid overwhelming own results
+      const sharedSlots = Math.min(2, maxResults - ownResults.length, sharedResults.length);
+      if (sharedSlots <= 0) {
+        return ownResults;
+      }
+
+      return [...ownResults, ...sharedResults.slice(0, sharedSlots)];
     }
 
-    const ownResults = merged.filter((entry) => entry.score >= minScore).slice(0, maxResults);
+    // Hybrid defaults can produce keyword-only matches with max score equal to
+    // textWeight (for example 0.3). If minScore is higher (for example 0.35),
+    // these exact lexical hits get filtered out even when they are the only
+    // relevant results.
+    const relaxedMinScore = Math.min(minScore, hybrid.textWeight);
+    const keywordKeys = new Set(
+      keywordResults.map(
+        (entry) => `${entry.source}:${entry.path}:${entry.startLine}:${entry.endLine}`,
+      ),
+    );
+    const ownResults = merged
+      .filter(
+        (entry) =>
+          keywordKeys.has(`${entry.source}:${entry.path}:${entry.startLine}:${entry.endLine}`) &&
+          entry.score >= relaxedMinScore,
+      )
+      .slice(0, maxResults);
 
     // Cross-agent sharing (piece #19): also search shared memory pool
     const sharedResults = this.searchSharedPool(cleaned, maxResults);
@@ -337,8 +368,6 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       return ownResults;
     }
 
-    // Merge shared results into own results, keeping total under maxResults
-    // Reserve at most 2 slots for shared memory to avoid overwhelming own results
     const sharedSlots = Math.min(2, maxResults - ownResults.length, sharedResults.length);
     if (sharedSlots <= 0) {
       return ownResults;
@@ -372,23 +401,6 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     } catch {
       return [];
     }
-    // Hybrid defaults can produce keyword-only matches with max score equal to
-    // textWeight (for example 0.3). If minScore is higher (for example 0.35),
-    // these exact lexical hits get filtered out even when they are the only
-    // relevant results.
-    const relaxedMinScore = Math.min(minScore, hybrid.textWeight);
-    const keywordKeys = new Set(
-      keywordResults.map(
-        (entry) => `${entry.source}:${entry.path}:${entry.startLine}:${entry.endLine}`,
-      ),
-    );
-    return merged
-      .filter(
-        (entry) =>
-          keywordKeys.has(`${entry.source}:${entry.path}:${entry.startLine}:${entry.endLine}`) &&
-          entry.score >= relaxedMinScore,
-      )
-      .slice(0, maxResults);
   }
 
   private async searchVector(

@@ -1,6 +1,6 @@
-import { applyRecommendedWorkflowLaneConfig } from "../agents/workflow-lane-presets.js";
 import fsPromises from "node:fs/promises";
 import nodePath from "node:path";
+import { applyRecommendedWorkflowLaneConfig } from "../agents/workflow-lane-presets.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import {
   type OpenClawConfig,
