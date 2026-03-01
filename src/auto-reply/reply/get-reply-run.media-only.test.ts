@@ -82,6 +82,7 @@ vi.mock("./typing-mode.js", () => ({
 
 import { runReplyAgent } from "./agent-runner.js";
 import { routeReply } from "./route-reply.js";
+import { resolveTypingMode } from "./typing-mode.js";
 
 function baseParams(
   overrides: Partial<Parameters<typeof runPreparedReply>[0]> = {},
@@ -271,6 +272,27 @@ describe("runPreparedReply media-only handling", () => {
           OriginatingChannel: "zulip",
           OriginatingTo: "DM-target",
           MediaPath: "/tmp/input.png",
+  it("uses inbound origin channel for run messageProvider", async () => {
+    await runPreparedReply(
+      baseParams({
+        ctx: {
+          Body: "",
+          RawBody: "",
+          CommandBody: "",
+          ThreadHistoryBody: "Earlier message in this thread",
+          OriginatingChannel: "webchat",
+          OriginatingTo: "session:abc",
+          ChatType: "group",
+        },
+        sessionCtx: {
+          Body: "",
+          BodyStripped: "",
+          ThreadHistoryBody: "Earlier message in this thread",
+          MediaPath: "/tmp/input.png",
+          Provider: "telegram",
+          ChatType: "group",
+          OriginatingChannel: "telegram",
+          OriginatingTo: "telegram:123",
         },
       }),
     );
@@ -278,5 +300,22 @@ describe("runPreparedReply media-only handling", () => {
     expect(result).toEqual({ text: "ok" });
     const call = vi.mocked(runReplyAgent).mock.calls[0]?.[0];
     expect(call?.followupRun.run.groupId).toBe("alice");
+    const call = vi.mocked(runReplyAgent).mock.calls[0]?.[0];
+    expect(call?.followupRun.run.messageProvider).toBe("webchat");
+  });
+
+  it("passes suppressTyping through typing mode resolution", async () => {
+    await runPreparedReply(
+      baseParams({
+        opts: {
+          suppressTyping: true,
+        },
+      }),
+    );
+
+    const call = vi.mocked(resolveTypingMode).mock.calls[0]?.[0] as
+      | { suppressTyping?: boolean }
+      | undefined;
+    expect(call?.suppressTyping).toBe(true);
   });
 });

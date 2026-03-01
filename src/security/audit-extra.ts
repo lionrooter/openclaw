@@ -16,6 +16,7 @@ export {
   collectGatewayOpenResponsesUrlAllowlistFindings,
   collectHooksHardeningFindings,
   collectHooksUnsafeExternalContentFindings,
+  collectLikelyMultiUserSetupFindings,
   collectMinimalProfileOverrideFindings,
   collectModelHygieneFindings,
   collectNodeDangerousAllowCommandFindings,
