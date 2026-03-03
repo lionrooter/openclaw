@@ -683,7 +683,9 @@ const ERROR_PATTERNS = {
     /\bstop reason:\s*abort\b/i,
     /\breason:\s*abort\b/i,
     /\bunhandled stop reason:\s*abort\b/i,
+    /fetch failed/i,
   ],
+
   billing: [
     /["']?(?:status|code)["']?\s*[:=]\s*402\b|\bhttp\s*402\b|\berror(?:\s+code)?\s*[:=]?\s*402\b|\b(?:got|returned|received)\s+(?:a\s+)?402\b|^\s*402\s+payment/i,
     "payment required",
@@ -713,6 +715,7 @@ const ERROR_PATTERNS = {
     "insufficient permissions",
     "insufficient permission",
     /missing scopes?:/i,
+    /not logged in/i,
     "expired",
     "token has expired",
     /\b401\b/,

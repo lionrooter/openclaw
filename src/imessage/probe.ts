@@ -27,6 +27,10 @@ type RpcSupportResult = {
 
 const rpcSupportCache = new Map<string, RpcSupportResult>();
 
+export function clearIMessageProbeCache(): void {
+  rpcSupportCache.clear();
+}
+
 async function probeRpcSupport(cliPath: string, timeoutMs: number): Promise<RpcSupportResult> {
   const cached = rpcSupportCache.get(cliPath);
   if (cached) {
@@ -99,7 +103,10 @@ export async function probeIMessage(
     return { ok: true };
   } catch (err) {
     const error = String(err);
-    const isPermissionIssue = /permission denied|authorization denied/i.test(error);
+    const isPermissionIssue =
+      /permission denied|authorization denied|not authorized|underlying:\s*permission denied/i.test(
+        error,
+      );
     return {
       ok: false,
       error,

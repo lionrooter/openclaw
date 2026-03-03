@@ -53,6 +53,8 @@ import { parseIMessageNotification } from "./parse-notification.js";
 import { normalizeAllowList, resolveRuntime } from "./runtime.js";
 import type { IMessagePayload, MonitorIMessageOpts } from "./types.js";
 
+const IMESSAGE_REPLY_TIMEOUT_SECONDS = 90;
+
 /**
  * Try to detect remote host from an SSH wrapper script like:
  *   exec ssh -T openclaw@192.168.64.3 /opt/homebrew/bin/imsg "$@"
@@ -319,6 +321,12 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       },
     });
 
+    const replyTarget = ctxPayload.To;
+    if (!replyTarget) {
+      runtime.error?.(danger("imessage: missing reply target"));
+      return;
+    }
+
     const updateTarget = chatTarget || decision.sender;
     await recordInboundSession({
       storePath,
@@ -354,18 +362,15 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       accountId: decision.route.accountId,
     });
 
+    let didDeliverAnyReply = false;
+
     const dispatcher = createReplyDispatcher({
       ...prefixOptions,
       humanDelay: resolveHumanDelayConfig(cfg, decision.route.agentId),
       deliver: async (payload) => {
-        const target = ctxPayload.To;
-        if (!target) {
-          runtime.error?.(danger("imessage: missing delivery target"));
-          return;
-        }
         await deliverReplies({
           replies: [payload],
-          target,
+          target: replyTarget,
           client,
           accountId: accountInfo.accountId,
           runtime,
@@ -373,26 +378,50 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
           textLimit,
           sentMessageCache,
         });
+        didDeliverAnyReply = true;
       },
       onError: (err, info) => {
         runtime.error?.(danger(`imessage ${info.kind} reply failed: ${String(err)}`));
       },
     });
 
-    const { queuedFinal } = await dispatchInboundMessage({
-      ctx: ctxPayload,
-      cfg,
-      dispatcher,
-      replyOptions: {
-        disableBlockStreaming:
-          typeof accountInfo.config.blockStreaming === "boolean"
-            ? !accountInfo.config.blockStreaming
-            : undefined,
-        onModelSelected,
-      },
-    });
+    let hasDeliveredReply = false;
+    try {
+      const { queuedFinal, counts } = await dispatchInboundMessage({
+        ctx: ctxPayload,
+        cfg,
+        dispatcher,
+        replyOptions: {
+          disableBlockStreaming:
+            typeof accountInfo.config.blockStreaming === "boolean"
+              ? !accountInfo.config.blockStreaming
+              : undefined,
+          onModelSelected,
+          timeoutOverrideSeconds: IMESSAGE_REPLY_TIMEOUT_SECONDS,
+        },
+      });
 
-    if (!queuedFinal) {
+      hasDeliveredReply =
+        queuedFinal || (counts.final ?? 0) > 0 || (counts.block ?? 0) > 0 || (counts.tool ?? 0) > 0;
+    } catch (err) {
+      runtime.error?.(danger(`imessage dispatch failed: ${String(err)}`));
+    }
+
+    if (!hasDeliveredReply || !didDeliverAnyReply) {
+      await deliverReplies({
+        replies: [
+          {
+            text: "⚠️ Unable to generate a reply for this iMessage. Please try again.",
+          },
+        ],
+        target: replyTarget,
+        client,
+        runtime,
+        maxBytes: mediaMaxBytes,
+        textLimit,
+        sentMessageCache,
+      });
+
       if (decision.isGroup && decision.historyKey) {
         clearHistoryEntriesIfEnabled({
           historyMap: groupHistories,

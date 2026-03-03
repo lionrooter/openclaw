@@ -190,6 +190,72 @@ describe("runWithModelFallback", () => {
     expect(run).toHaveBeenCalledWith("openai-codex", "gpt-5.3-codex");
   });
 
+  it("injects a codex rescue candidate after non-codex fallback providers", async () => {
+    const cfg = makeCfg({
+      agents: {
+        defaults: {
+          model: {
+            primary: "blockrun/auto",
+            fallbacks: ["anthropic/claude-sonnet-4-5", "claude-cli/sonnet"],
+          },
+        },
+      },
+    });
+
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("blockrun unavailable"))
+      .mockRejectedValueOnce(new Error("anthropic unavailable"))
+      .mockResolvedValueOnce("ok");
+
+    const result = await runWithModelFallback({
+      cfg,
+      provider: "blockrun",
+      model: "auto",
+      run,
+    });
+
+    expect(result.result).toBe("ok");
+    expect(run.mock.calls).toEqual([
+      ["blockrun", "auto"],
+      ["anthropic", "claude-sonnet-4-5"],
+      ["openai-codex", "gpt-5.3-codex"],
+    ]);
+  });
+
+  it("injects a codex rescue candidate even without claude-cli fallback configured", async () => {
+    const cfg = makeCfg({
+      agents: {
+        defaults: {
+          model: {
+            primary: "blockrun/auto",
+            fallbacks: ["anthropic/claude-sonnet-4-5"],
+          },
+        },
+      },
+    });
+
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("blockrun unavailable"))
+      .mockRejectedValueOnce(new Error("anthropic unavailable"))
+      .mockResolvedValueOnce("ok");
+
+    const result = await runWithModelFallback({
+      cfg,
+      provider: "blockrun",
+      model: "auto",
+      run,
+    });
+
+    expect(result.result).toBe("ok");
+    expect(run.mock.calls).toEqual([
+      ["blockrun", "auto"],
+      ["anthropic", "claude-sonnet-4-5"],
+      ["openai-codex", "gpt-5.3-codex"],
+    ]);
+  });
+
   it("falls back on unrecognized errors when candidates remain", async () => {
     const cfg = makeCfg();
     const run = vi.fn().mockRejectedValueOnce(new Error("bad request")).mockResolvedValueOnce("ok");
@@ -205,6 +271,28 @@ describe("runWithModelFallback", () => {
     expect(result.attempts).toHaveLength(1);
     expect(result.attempts[0].error).toBe("bad request");
     expect(result.attempts[0].reason).toBe("unknown");
+  });
+
+  it("records CLI exit-code failover metadata in fallback attempt", async () => {
+    const cfg = makeCfg();
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Claude CLI exited with code 1. Please try again."))
+      .mockResolvedValueOnce("ok");
+
+    const result = await runWithModelFallback({
+      cfg,
+      provider: "openai",
+      model: "gpt-4.1-mini",
+      run,
+    });
+
+    expect(result.result).toBe("ok");
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(result.attempts).toHaveLength(1);
+    expect(result.attempts[0].reason).toBe("unknown");
+    expect(result.attempts[0].code).toBe("1");
+    expect(result.attempts[0].error).toBe("Claude CLI exited with code 1. Please try again.");
   });
 
   it("passes original unknown errors to onError during fallback", async () => {

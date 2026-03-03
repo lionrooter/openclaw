@@ -254,7 +254,12 @@ export class IMessageRpcClient {
     }
 
     const isPermissionDenied =
-      /^permissionDenied\(/i.test(trimmed) || /authorization denied/i.test(trimmed);
+      /^permissionDenied\(/i.test(trimmed) ||
+      /authorization denied/i.test(trimmed) ||
+      /permission denied/i.test(trimmed) ||
+      /not authorized/i.test(trimmed) ||
+      /underlying: authorization denied/i.test(trimmed);
+
     if (isPermissionDenied) {
       this.startupErrorMessage =
         this.startupErrorMessage ?? `imsg rpc permission denied: ${trimmed}`;

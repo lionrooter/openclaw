@@ -8,6 +8,57 @@ const TIMEOUT_HINT_RE =
   /timeout|timed out|deadline exceeded|context deadline exceeded|stop reason:\s*abort|reason:\s*abort|unhandled stop reason:\s*abort/i;
 const ABORT_TIMEOUT_RE = /request was aborted|request aborted/i;
 
+const REPO_PROMPT_ERROR_RE = /repo[-_\s]*prompt.*AIProviderError,\s*code\s+(\d+)\]/i;
+const CLI_EXIT_CODE_RE =
+  /(?:claude\s*cli|command|process).*?(?:exited with code|exit code)\s*(\d+)/i;
+const GENERIC_EXIT_CODE_RE =
+  /(?:\b(?:exit|exited|terminated)\s*(?:with|code)?\s*\(?code\)?)\s*(\d+)|\bcode\s+(\d+)\b/i;
+
+function parseErrorCode(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+    const parsed = Number.parseInt(trimmed, 10);
+    return Number.isFinite(parsed) && String(parsed) === trimmed ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function parseExitCodeFromMessage(raw: string): number | undefined {
+  const normalized = raw.trim();
+  if (!normalized) {
+    return undefined;
+  }
+  const repoPromptMatch = normalized.match(REPO_PROMPT_ERROR_RE);
+  if (repoPromptMatch?.[1]) {
+    const parsed = Number.parseInt(repoPromptMatch[1], 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  const cliMatch = normalized.match(CLI_EXIT_CODE_RE);
+  if (cliMatch?.[1]) {
+    const parsed = Number.parseInt(cliMatch[1], 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  const genericMatch = normalized.match(GENERIC_EXIT_CODE_RE);
+  if (genericMatch) {
+    const value = genericMatch[1] || genericMatch[2];
+    if (value) {
+      const parsed = Number.parseInt(value, 10);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return undefined;
+}
+
 export class FailoverError extends Error {
   readonly reason: FailoverReason;
   readonly provider?: string;
@@ -87,16 +138,59 @@ function getErrorName(err: unknown): string {
   return "name" in err ? String(err.name) : "";
 }
 
-function getErrorCode(err: unknown): string | undefined {
+function getRawErrorCode(err: unknown): string | undefined {
   if (!err || typeof err !== "object") {
     return undefined;
   }
-  const candidate = (err as { code?: unknown }).code;
-  if (typeof candidate !== "string") {
-    return undefined;
+
+  const record = err as {
+    code?: unknown;
+    exitCode?: unknown;
+    exit_code?: unknown;
+    statusCode?: unknown;
+    cause?: unknown;
+    details?: unknown;
+    error?: unknown;
+  };
+
+  const directCandidates = [
+    record.code,
+    record.exitCode,
+    record.exit_code,
+    record.statusCode,
+    record.error,
+  ];
+  for (const candidate of directCandidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return String(candidate);
+    }
   }
-  const trimmed = candidate.trim();
-  return trimmed ? trimmed : undefined;
+
+  const message = getErrorMessage(err);
+  const fromMessage = parseExitCodeFromMessage(message);
+  if (fromMessage !== undefined) {
+    return String(fromMessage);
+  }
+
+  const causeCode = getRawErrorCode(record.cause);
+  if (causeCode) {
+    return causeCode;
+  }
+
+  const detailsCode = getRawErrorCode(record.details);
+  if (detailsCode) {
+    return detailsCode;
+  }
+
+  return undefined;
+}
+
+function getErrorCode(err: unknown): string | undefined {
+  const raw = getRawErrorCode(err);
+  return parseErrorCode(raw) !== undefined ? String(parseErrorCode(raw)) : undefined;
 }
 
 function getErrorMessage(err: unknown): string {
@@ -156,7 +250,10 @@ export function resolveFailoverReasonFromError(err: unknown): FailoverReason | n
     return err.reason;
   }
 
+  const message = getErrorMessage(err);
+  const code = getErrorCode(err);
   const status = getStatusCode(err);
+
   if (status === 402) {
     return "billing";
   }
@@ -164,8 +261,7 @@ export function resolveFailoverReasonFromError(err: unknown): FailoverReason | n
     return "rate_limit";
   }
   if (status === 401 || status === 403) {
-    const msg = getErrorMessage(err);
-    if (msg && isAuthPermanentErrorMessage(msg)) {
+    if (message && isAuthPermanentErrorMessage(message)) {
       return "auth_permanent";
     }
     return "auth";
@@ -180,15 +276,55 @@ export function resolveFailoverReasonFromError(err: unknown): FailoverReason | n
     return "format";
   }
 
-  const code = (getErrorCode(err) ?? "").toUpperCase();
-  if (["ETIMEDOUT", "ESOCKETTIMEDOUT", "ECONNRESET", "ECONNABORTED"].includes(code)) {
+  const rawCode = getRawErrorCode(err);
+  if (
+    ["ETIMEDOUT", "ESOCKETTIMEDOUT", "ECONNRESET", "ECONNABORTED"].includes(
+      rawCode?.toUpperCase() ?? "",
+    )
+  ) {
     return "timeout";
   }
+
+  const normalizedCode = code ? parseInt(code, 10) : NaN;
+  if (Number.isFinite(normalizedCode)) {
+    if (normalizedCode >= 100 && normalizedCode < 600) {
+      if (normalizedCode === 408) {
+        return "timeout";
+      }
+      if (normalizedCode === 400) {
+        return "format";
+      }
+      if (normalizedCode === 401 || normalizedCode === 403) {
+        return isAuthPermanentErrorMessage(message ?? "") ? "auth_permanent" : "auth";
+      }
+      if (normalizedCode === 402) {
+        return "billing";
+      }
+      if (normalizedCode === 429) {
+        return "rate_limit";
+      }
+      if (
+        normalizedCode === 500 ||
+        normalizedCode === 502 ||
+        normalizedCode === 503 ||
+        normalizedCode === 504
+      ) {
+        return "timeout";
+      }
+      if (normalizedCode === 404) {
+        return "model_not_found";
+      }
+      return "unknown";
+    }
+    if (normalizedCode !== 0) {
+      return "unknown";
+    }
+  }
+
   if (isTimeoutError(err)) {
     return "timeout";
   }
 
-  const message = getErrorMessage(err);
   if (!message) {
     return null;
   }

@@ -25,8 +25,13 @@ import {
   writeCliImages,
 } from "./cli-runner/helpers.js";
 import { resolveOpenClawDocsPath } from "./docs-path.js";
-import { FailoverError, resolveFailoverStatus } from "./failover-error.js";
-import { classifyFailoverReason, isFailoverErrorMessage } from "./pi-embedded-helpers.js";
+import {
+  coerceToFailoverError,
+  FailoverError,
+  resolveFailoverReasonFromError,
+  resolveFailoverStatus,
+} from "./failover-error.js";
+import { isFailoverErrorMessage } from "./pi-embedded-helpers.js";
 import type { EmbeddedPiRunResult } from "./pi-embedded-runner.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "./workspace-run.js";
 
@@ -296,18 +301,23 @@ export async function runCliAgent(params: {
           });
         }
         const err = stderr || stdout || "CLI failed.";
+        const reason = resolveFailoverReasonFromError({
+          message: err,
+          code: result.exitCode,
+          exitCode: result.exitCode,
+        });
         if (!stderr && !stdout) {
           log.warn(
             `cli empty output: provider=${params.provider} model=${modelId} exitCode=${result.exitCode} signal=${result.exitSignal ?? "none"} reason=${result.reason}`,
           );
         }
-        const reason = classifyFailoverReason(err) ?? "unknown";
-        const status = resolveFailoverStatus(reason);
+        const status = resolveFailoverStatus(reason ?? "unknown");
         throw new FailoverError(err, {
-          reason,
+          reason: reason ?? "unknown",
           provider: params.provider,
           model: modelId,
           status,
+          code: result.exitCode === null ? undefined : String(result.exitCode),
         });
       }
 
@@ -345,8 +355,16 @@ export async function runCliAgent(params: {
       throw err;
     }
     const message = err instanceof Error ? err.message : String(err);
+    const coerced = coerceToFailoverError(err, {
+      provider: params.provider,
+      model: modelId,
+    });
+    if (coerced) {
+      throw coerced;
+    }
+
     if (isFailoverErrorMessage(message)) {
-      const reason = classifyFailoverReason(message) ?? "unknown";
+      const reason = resolveFailoverReasonFromError(message) ?? "unknown";
       const status = resolveFailoverStatus(reason);
       throw new FailoverError(message, {
         reason,

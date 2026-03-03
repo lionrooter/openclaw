@@ -113,6 +113,85 @@ function sameModelCandidate(a: ModelCandidate, b: ModelCandidate): boolean {
   return a.provider === b.provider && a.model === b.model;
 }
 
+function isAnthropicModelCandidate(ref: ModelCandidate): boolean {
+  return ref.provider === "anthropic" || ref.provider === "claude" || ref.provider === "claude-cli";
+}
+
+function isCodexModelCandidate(ref: ModelCandidate): boolean {
+  return ref.provider === "codex" || ref.provider === "openai-codex";
+}
+
+function isRoutersModelCandidate(ref: ModelCandidate): boolean {
+  return ref.provider === "blockrun";
+}
+
+const DEFAULT_CODEX_RESCUE_MODEL = "openai-codex/gpt-5.3-codex";
+
+function resolveCodexModelCandidateFromDefaults(params: {
+  cfg: OpenClawConfig | undefined;
+  defaultProvider: string;
+  aliasIndex: ReturnType<typeof buildModelAliasIndex>;
+}): ModelCandidate | null {
+  const models = params.cfg?.agents?.defaults?.models;
+  if (models && typeof models === "object") {
+    const resolveCodexModelCandidate = (raw: string): ModelCandidate | null => {
+      const parsed = resolveModelRefFromString({
+        raw,
+        defaultProvider: params.defaultProvider,
+        aliasIndex: params.aliasIndex,
+      });
+      if (parsed && isCodexModelCandidate(parsed.ref)) {
+        return parsed.ref;
+      }
+      return null;
+    };
+
+    for (const keyRaw of Object.keys(models)) {
+      const key = String(keyRaw ?? "").trim();
+      if (!key) {
+        continue;
+      }
+
+      let candidate = resolveCodexModelCandidate(key);
+      if (!candidate && !key.includes("/") && /codex/i.test(key)) {
+        candidate =
+          resolveCodexModelCandidate(`codex/${key}`) ??
+          resolveCodexModelCandidate(`openai-codex/${key}`);
+      }
+
+      if (candidate) {
+        return candidate;
+      }
+    }
+  }
+
+  const fallbackCandidate = resolveModelRefFromString({
+    raw: DEFAULT_CODEX_RESCUE_MODEL,
+    defaultProvider: params.defaultProvider,
+    aliasIndex: params.aliasIndex,
+  });
+  return fallbackCandidate?.ref ?? null;
+}
+
+function shouldInjectCodexRescue(params: {
+  candidates: ModelCandidate[];
+  fallbacksOverride: string[] | undefined;
+  hasConfiguredFallbacks: boolean;
+}): boolean {
+  if (params.fallbacksOverride !== undefined || !params.hasConfiguredFallbacks) {
+    return false;
+  }
+
+  const hasNonClaudeFallback = params.candidates.some(
+    (candidate) =>
+      !isAnthropicModelCandidate(candidate) &&
+      !isRoutersModelCandidate(candidate) &&
+      !isCodexModelCandidate(candidate),
+  );
+  const hasCodexCandidate = params.candidates.some((candidate) => isCodexModelCandidate(candidate));
+  return !hasNonClaudeFallback && !hasCodexCandidate;
+}
+
 function throwFallbackFailureSummary(params: {
   attempts: FallbackAttempt[];
   candidates: ModelCandidate[];
@@ -241,6 +320,10 @@ function resolveFallbackCandidates(params: {
     return configuredFallbacks;
   })();
 
+  const normalizedFallbacks: ModelCandidate[] = [];
+  const fallbackCandidates: ModelCandidate[] = [];
+  const fallbackCliCandidates: ModelCandidate[] = [];
+
   for (const raw of modelFallbacks) {
     const resolved = resolveModelRefFromString({
       raw: String(raw ?? ""),
@@ -252,7 +335,40 @@ function resolveFallbackCandidates(params: {
     }
     // Fallbacks are explicit user intent; do not silently filter them by the
     // model allowlist.
-    addExplicitCandidate(resolved.ref);
+    const candidate = resolved.ref;
+    if (candidate.provider === "claude-cli") {
+      fallbackCliCandidates.push(candidate);
+    } else {
+      fallbackCandidates.push(candidate);
+    }
+  }
+
+  for (const candidate of fallbackCandidates) {
+    normalizedFallbacks.push(candidate);
+    addExplicitCandidate(candidate);
+  }
+
+  if (
+    params.fallbacksOverride === undefined &&
+    shouldInjectCodexRescue({
+      candidates: [...candidates, ...normalizedFallbacks],
+      fallbacksOverride: params.fallbacksOverride,
+      hasConfiguredFallbacks: fallbackCandidates.length > 0 || fallbackCliCandidates.length > 0,
+    })
+  ) {
+    const codexCandidate = resolveCodexModelCandidateFromDefaults({
+      cfg: params.cfg,
+      defaultProvider,
+      aliasIndex,
+    });
+    if (codexCandidate) {
+      addExplicitCandidate(codexCandidate);
+    }
+  }
+
+  for (const candidate of fallbackCliCandidates) {
+    normalizedFallbacks.push(candidate);
+    addExplicitCandidate(candidate);
   }
 
   if (params.fallbacksOverride === undefined && primary?.provider && primary.model) {

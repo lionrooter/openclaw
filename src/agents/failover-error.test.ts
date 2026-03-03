@@ -105,4 +105,24 @@ describe("failover-error", () => {
     expect(described.message).toBe("123");
     expect(described.reason).toBeUndefined();
   });
+
+  it("resolves numeric exit-code errors as failover-unknown", () => {
+    const reason = resolveFailoverReasonFromError({
+      message: "Claude CLI exited with code 1. Please try again.",
+    });
+    expect(reason).toBe("unknown");
+  });
+
+  it("coerces RepoPrompt wrapper errors with exit code", () => {
+    const coerced = coerceToFailoverError(
+      new Error("Unknown error [RepoPrompt.AIProviderError, code 1]: command execution failed."),
+      {
+        provider: "claude-cli",
+        model: "opus",
+      },
+    );
+    expect(coerced).not.toBeNull();
+    expect(coerced?.reason).toBe("unknown");
+    expect(coerced?.code).toBe("1");
+  });
 });
