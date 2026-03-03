@@ -1,20 +1,18 @@
 ---
-summary: "Web search + fetch + context tools (Brave Search API, Perplexity direct/OpenRouter, Gemini Google Search grounding)"
+summary: "Web search + fetch tools (Brave, Perplexity, Gemini, Grok, and Kimi providers)"
 read_when:
-  - You want to enable web_search, web_search_context, or web_fetch
+  - You want to enable web_search or web_fetch
   - You need Brave Search API key setup
   - You want to use Perplexity Sonar for web search
   - You want to use Gemini with Google Search grounding
-  - You want LLM-optimized content chunks from the web
 title: "Web Tools"
 ---
 
 # Web tools
 
-OpenClaw ships three lightweight web tools:
+OpenClaw ships two lightweight web tools:
 
-- `web_search` — Search the web via Brave Search API (default), Perplexity Sonar (direct or via OpenRouter), or Gemini with Google Search grounding.
-- `web_search_context` — Retrieve LLM-optimized content chunks from web pages (Brave Context API). Returns actual page content, not just links.
+- `web_search` — Search the web via Brave Search API (default), Perplexity Sonar, Gemini with Google Search grounding, Grok, or Kimi.
 - `web_fetch` — HTTP fetch + readable extraction (HTML → markdown/text).
 
 These are **not** browser automation. For JS-heavy sites or logins, use the
@@ -33,11 +31,13 @@ These are **not** browser automation. For JS-heavy sites or logins, use the
 
 ## Choosing a search provider
 
-| Provider            | Pros                                         | Cons                                     | API Key                                      |
-| ------------------- | -------------------------------------------- | ---------------------------------------- | -------------------------------------------- |
-| **Brave** (default) | Fast, structured results, free tier          | Traditional search results               | `BRAVE_API_KEY`                              |
-| **Perplexity**      | AI-synthesized answers, citations, real-time | Requires Perplexity or OpenRouter access | `OPENROUTER_API_KEY` or `PERPLEXITY_API_KEY` |
-| **Gemini**          | Google Search grounding, AI-synthesized      | Requires Gemini API key                  | `GEMINI_API_KEY`                             |
+| Provider            | Pros                                         | Cons                                           | API Key                                      |
+| ------------------- | -------------------------------------------- | ---------------------------------------------- | -------------------------------------------- |
+| **Brave** (default) | Fast, structured results                     | Traditional search results; AI-use terms apply | `BRAVE_API_KEY`                              |
+| **Perplexity**      | AI-synthesized answers, citations, real-time | Requires Perplexity or OpenRouter access       | `OPENROUTER_API_KEY` or `PERPLEXITY_API_KEY` |
+| **Gemini**          | Google Search grounding, AI-synthesized      | Requires Gemini API key                        | `GEMINI_API_KEY`                             |
+| **Grok**            | xAI web-grounded responses                   | Requires xAI API key                           | `XAI_API_KEY`                                |
+| **Kimi**            | Moonshot web search capability               | Requires Moonshot API key                      | `KIMI_API_KEY` / `MOONSHOT_API_KEY`          |
 
 See [Brave Search setup](/brave-search) and [Perplexity Sonar](/perplexity) for provider-specific details.
 
@@ -45,10 +45,11 @@ See [Brave Search setup](/brave-search) and [Perplexity Sonar](/perplexity) for 
 
 If no `provider` is explicitly set, OpenClaw auto-detects which provider to use based on available API keys, checking in this order:
 
-1. **Brave** — `BRAVE_API_KEY` env var or `search.apiKey` config
-2. **Gemini** — `GEMINI_API_KEY` env var or `search.gemini.apiKey` config
-3. **Perplexity** — `PERPLEXITY_API_KEY` / `OPENROUTER_API_KEY` env var or `search.perplexity.apiKey` config
-4. **Grok** — `XAI_API_KEY` env var or `search.grok.apiKey` config
+1. **Brave** — `BRAVE_API_KEY` env var or `tools.web.search.apiKey` config
+2. **Gemini** — `GEMINI_API_KEY` env var or `tools.web.search.gemini.apiKey` config
+3. **Kimi** — `KIMI_API_KEY` / `MOONSHOT_API_KEY` env var or `tools.web.search.kimi.apiKey` config
+4. **Perplexity** — `PERPLEXITY_API_KEY` / `OPENROUTER_API_KEY` env var or `tools.web.search.perplexity.apiKey` config
+5. **Grok** — `XAI_API_KEY` env var or `tools.web.search.grok.apiKey` config
 
 If no keys are found, it falls back to Brave (you'll get a missing-key error prompting you to configure one).
 
@@ -61,7 +62,7 @@ Set the provider in config:
   tools: {
     web: {
       search: {
-        provider: "brave", // or "perplexity" or "gemini"
+        provider: "brave", // or "perplexity" or "gemini" or "grok" or "kimi"
       },
     },
   },
@@ -93,8 +94,12 @@ Example: switch to Perplexity Sonar (direct API):
 2. In the dashboard, choose the **Data for Search** plan (not “Data for AI”) and generate an API key.
 3. Run `openclaw configure --section web` to store the key in config (recommended), or set `BRAVE_API_KEY` in your environment.
 
-Brave provides a free tier plus paid plans; check the Brave API portal for the
+Brave provides paid plans; check the Brave API portal for the
 current limits and pricing.
+
+Brave Terms include restrictions on some AI-related uses of Search Results.
+Review the Brave Terms of Service and confirm your intended use is compliant.
+For legal questions, consult your counsel.
 
 ### Where to set the key (recommended)
 
@@ -210,6 +215,9 @@ Search the web using your configured provider.
 - API key for your chosen provider:
   - **Brave**: `BRAVE_API_KEY` or `tools.web.search.apiKey`
   - **Perplexity**: `OPENROUTER_API_KEY`, `PERPLEXITY_API_KEY`, or `tools.web.search.perplexity.apiKey`
+  - **Gemini**: `GEMINI_API_KEY` or `tools.web.search.gemini.apiKey`
+  - **Grok**: `XAI_API_KEY` or `tools.web.search.grok.apiKey`
+  - **Kimi**: `KIMI_API_KEY`, `MOONSHOT_API_KEY`, or `tools.web.search.kimi.apiKey`
 
 ### Config
 
@@ -263,70 +271,6 @@ await web_search({
 await web_search({
   query: "TMBG interview",
   freshness: "pw",
-});
-```
-
-## web_search_context
-
-Retrieve LLM-optimized content chunks from web pages using the Brave Context API.
-Unlike `web_search` (which returns titles, URLs, and snippets), `web_search_context`
-returns pre-extracted, relevance-scored page content — the actual text agents need
-to reason about, without a separate `web_fetch` step.
-
-### web_search_context requirements
-
-- Provider must be **Brave** (default)
-- Same Brave API key as `web_search` (`BRAVE_API_KEY` or `tools.web.search.apiKey`)
-- Brave API plan must include the LLM Context endpoint
-
-### web_search_context config
-
-```json5
-{
-  tools: {
-    web: {
-      search: {
-        context: {
-          enabled: true, // default: true when provider=brave + key present
-          maxTokens: 8192, // default token budget (1024-32768)
-          maxUrls: 20, // default max source URLs (1-50)
-          maxTokensPerUrl: 4096, // default tokens per source (512-8192)
-          thresholdMode: "balanced", // strict/balanced/lenient/disabled
-          timeoutSeconds: 30, // inherits from search if omitted
-          cacheTtlMinutes: 15, // inherits from search if omitted
-        },
-      },
-    },
-  },
-}
-```
-
-### web_search_context tool parameters
-
-- `query` (required): search query
-- `max_tokens` (1024–32768; default: 8192): total token budget for response
-- `max_urls` (1–50; default: 20): max source URLs
-- `max_tokens_per_url` (512–8192; default: 4096): tokens per source
-- `count` (1–50; default: 20): search results to consider
-- `country` (default: "US"): 2-letter country code
-- `search_lang` (optional): ISO language code
-- `threshold` (default: "balanced"): relevance filter — strict/balanced/lenient/disabled
-
-**Examples:**
-
-```javascript
-// Get content about a topic
-await web_search_context({
-  query: "Brave LLM Context API documentation",
-  max_tokens: 4096,
-});
-
-// Comprehensive research with more sources
-await web_search_context({
-  query: "transformer architecture improvements 2025",
-  max_tokens: 16384,
-  max_urls: 30,
-  threshold: "lenient",
 });
 ```
 
@@ -386,5 +330,5 @@ Notes:
 - `web_fetch` is best-effort extraction; some sites will need the browser tool.
 - See [Firecrawl](/tools/firecrawl) for key setup and service details.
 - Responses are cached (default 15 minutes) to reduce repeated fetches.
-- If you use tool profiles/allowlists, add `web_search`/`web_fetch`/`web_search_context` or `group:web`.
-- If the Brave key is missing, `web_search` and `web_search_context` return a short setup hint with a docs link.
+- If you use tool profiles/allowlists, add `web_search`/`web_fetch` or `group:web`.
+- If the Brave key is missing, `web_search` returns a short setup hint with a docs link.

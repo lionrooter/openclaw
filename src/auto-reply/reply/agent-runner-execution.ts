@@ -295,15 +295,8 @@ export async function runAgentTurnWithFallback(params: {
           });
           return runEmbeddedPiAgent({
             ...embeddedContext,
-            sessionId: params.followupRun.run.sessionId,
-            sessionKey: params.sessionKey,
-            agentId: params.followupRun.run.agentId,
-            messageProvider: params.sessionCtx.Provider?.trim().toLowerCase() || undefined,
-            agentAccountId: params.sessionCtx.AccountId,
-            messageTo: params.sessionCtx.OriginatingTo ?? params.sessionCtx.To,
-            messageThreadId: params.sessionCtx.MessageThreadId ?? undefined,
-            groupId:
-              params.followupRun.run.groupId ?? resolveGroupSessionKey(params.sessionCtx)?.id,
+            trigger: params.isHeartbeat ? "heartbeat" : "user",
+            groupId: resolveGroupSessionKey(params.sessionCtx)?.id,
             groupChannel:
               params.sessionCtx.GroupChannel?.trim() ?? params.sessionCtx.GroupSubject?.trim(),
             groupSpace: params.sessionCtx.GroupSpace?.trim() ?? undefined,

@@ -7,6 +7,7 @@ import {
   requireOpenAllowFrom,
 } from "openclaw/plugin-sdk";
 import { z } from "zod";
+import { buildSecretInputSchema } from "./secret-input.js";
 
 export const NextcloudTalkRoomSchema = z
   .object({
@@ -25,10 +26,10 @@ export const NextcloudTalkAccountSchemaBase = z
     enabled: z.boolean().optional(),
     markdown: MarkdownConfigSchema,
     baseUrl: z.string().optional(),
-    botSecret: z.string().optional(),
+    botSecret: buildSecretInputSchema().optional(),
     botSecretFile: z.string().optional(),
     apiUser: z.string().optional(),
-    apiPassword: z.string().optional(),
+    apiPassword: buildSecretInputSchema().optional(),
     apiPasswordFile: z.string().optional(),
     dmPolicy: DmPolicySchema.optional().default("pairing"),
     webhookPort: z.number().int().positive().optional(),
