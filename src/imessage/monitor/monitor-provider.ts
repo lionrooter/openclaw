@@ -35,6 +35,10 @@ import {
   readChannelAllowFromStore,
   upsertChannelPairingRequest,
 } from "../../pairing/pairing-store.js";
+import {
+  applyContentRouteOverride,
+  resolveContentRoutingConfig,
+} from "../../routing/content-route.js";
 import { resolvePinnedMainDmOwnerFromAllowlist } from "../../security/dm-policy-shared.js";
 import { truncateUtf16Safe } from "../../utils.js";
 import { resolveIMessageAccount } from "../accounts.js";
@@ -298,6 +302,30 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       return;
     }
 
+    // Content-based routing override: classify message content to pick the right agent.
+    const contentRoutingCfg = resolveContentRoutingConfig(cfg);
+    if (contentRoutingCfg) {
+      const contentOverride = await applyContentRouteOverride({
+        cfg,
+        contentRoutingCfg,
+        text: bodyText,
+        mediaType,
+        peer: decision.senderNormalized,
+        isGroup: decision.isGroup,
+        accountId: accountInfo.accountId,
+        dmScope: cfg.session?.dmScope,
+        logVerbose,
+      });
+      if (contentOverride) {
+        decision.route = {
+          ...decision.route,
+          agentId: contentOverride.agentId,
+          sessionKey: contentOverride.sessionKey,
+          matchedBy: contentOverride.matchedBy,
+        };
+      }
+    }
+
     const storePath = resolveStorePath(cfg.session?.store, {
       agentId: decision.route.agentId,
     });
@@ -490,16 +518,20 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     return;
   }
 
+  const onStatus = opts.onStatus;
+
   const client = await createIMessageRpcClient({
     cliPath,
     dbPath,
     runtime,
     onNotification: (msg) => {
       if (msg.method === "message") {
+        onStatus?.({ lastEventAt: Date.now(), lastInboundAt: Date.now() });
         void handleMessage(msg.params).catch((err) => {
           runtime.error?.(`imessage: handler failed: ${String(err)}`);
         });
       } else if (msg.method === "error") {
+        onStatus?.({ lastEventAt: Date.now() });
         runtime.error?.(`imessage: watch error ${JSON.stringify(msg.params)}`);
       }
     },
@@ -513,11 +545,36 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     getSubscriptionId: () => subscriptionId,
   });
 
+  // Periodic heartbeat to keep the health monitor from treating the channel as
+  // stale.  iMessage's RPC transport has no inherent keepalive events, so
+  // without this the health monitor restarts the provider every ~35 minutes.
+  const HEARTBEAT_INTERVAL_MS = 10 * 60_000; // 10 minutes (threshold is 30)
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
   try {
     const result = await client.request<{ subscription?: number }>("watch.subscribe", {
       attachments: includeAttachments,
     });
     subscriptionId = result?.subscription ?? null;
+    onStatus?.({ connected: true, lastEventAt: Date.now() });
+
+    heartbeatTimer = setInterval(() => {
+      if (abort?.aborted) {
+        return;
+      }
+      client
+        .request("chats.list", { limit: 0 }, { timeoutMs: 10_000 })
+        .then(() => {
+          onStatus?.({ lastEventAt: Date.now() });
+        })
+        .catch((err) => {
+          logVerbose(`imessage: heartbeat ping failed: ${String(err)}`);
+        });
+    }, HEARTBEAT_INTERVAL_MS);
+    if (typeof heartbeatTimer === "object" && "unref" in heartbeatTimer) {
+      heartbeatTimer.unref();
+    }
+
     await client.waitForClose();
   } catch (err) {
     if (abort?.aborted) {
@@ -526,6 +583,9 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
     runtime.error?.(danger(`imessage: monitor failed: ${String(err)}`));
     throw err;
   } finally {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+    }
     detachAbortHandler();
     await client.stop();
   }
