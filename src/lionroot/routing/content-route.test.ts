@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { OpenClawConfig } from "../../config/config.js";
 import {
+  parseAgentCategory,
   resolveContentRouteFastPath,
   classifyContentWithLLM,
   resolveContentRouteWithStickiness,
@@ -29,6 +30,30 @@ const baseCfg: ContentRoutingConfig = {
   stickyTimeoutMs: 600_000,
   agents: AGENT_DESCRIPTIONS,
 };
+
+// ── Agent:category parsing tests ──
+
+describe("parseAgentCategory", () => {
+  it("parses plain agent name", () => {
+    expect(parseAgentCategory("liev")).toEqual({ agentId: "liev" });
+  });
+
+  it("parses agent:category format", () => {
+    expect(parseAgentCategory("liev:intake")).toEqual({ agentId: "liev", category: "intake" });
+  });
+
+  it("parses agent:category with extra punctuation", () => {
+    expect(parseAgentCategory("cody:review.")).toEqual({ agentId: "cody", category: "review" });
+  });
+
+  it("handles empty category after colon", () => {
+    expect(parseAgentCategory("liev:")).toEqual({ agentId: "liev" });
+  });
+
+  it("strips non-alphanumeric characters", () => {
+    expect(parseAgentCategory("  liev  ")).toEqual({ agentId: "liev" });
+  });
+});
 
 // ── Fast-path tests ──
 
@@ -232,7 +257,7 @@ describe("classifyContentWithLLM", () => {
   it("returns agent from successful LLM response", async () => {
     const mockFetch = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ response: "liev" }),
+      json: async () => ({ message: { content: "liev" } }),
     });
     vi.stubGlobal("fetch", mockFetch);
 
@@ -247,7 +272,7 @@ describe("classifyContentWithLLM", () => {
     expect(result.confidence).toBe("high");
     expect(mockFetch).toHaveBeenCalledOnce();
     const fetchArgs = mockFetch.mock.calls[0];
-    expect(fetchArgs[0]).toBe("http://localhost:11434/api/generate");
+    expect(fetchArgs[0]).toBe("http://localhost:11434/api/chat");
   });
 
   it("handles LLM response with extra text", async () => {
@@ -255,7 +280,7 @@ describe("classifyContentWithLLM", () => {
       "fetch",
       vi.fn().mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ response: "cody." }),
+        json: async () => ({ message: { content: "cody." } }),
       }),
     );
 
@@ -275,7 +300,7 @@ describe("classifyContentWithLLM", () => {
       "fetch",
       vi.fn().mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ response: "unknown-agent" }),
+        json: async () => ({ message: { content: "unknown-agent" } }),
       }),
     );
 
@@ -323,7 +348,7 @@ describe("classifyContentWithLLM", () => {
   it("includes media type hint in prompt", async () => {
     const mockFetch = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ response: "liev" }),
+      json: async () => ({ message: { content: "liev" } }),
     });
     vi.stubGlobal("fetch", mockFetch);
 
@@ -336,13 +361,54 @@ describe("classifyContentWithLLM", () => {
     });
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.prompt).toContain("image/jpeg attachment");
+    expect(body.messages[0].content).toContain("image/jpeg attachment");
+  });
+
+  it("parses agent:category from LLM response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ message: { content: "liev:intake" } }),
+      }),
+    );
+
+    const result = await classifyContentWithLLM({
+      text: "had eggs for breakfast",
+      model: "test-model",
+      ollamaUrl: "http://localhost:11434",
+      agentDescriptions: AGENT_DESCRIPTIONS,
+    });
+
+    expect(result.agentId).toBe("liev");
+    expect(result.category).toBe("intake");
+    expect(result.confidence).toBe("high");
+  });
+
+  it("returns category as undefined for plain agent response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ message: { content: "cody" } }),
+      }),
+    );
+
+    const result = await classifyContentWithLLM({
+      text: "review this PR",
+      model: "test-model",
+      ollamaUrl: "http://localhost:11434",
+      agentDescriptions: AGENT_DESCRIPTIONS,
+    });
+
+    expect(result.agentId).toBe("cody");
+    expect(result.category).toBeUndefined();
   });
 
   it("includes tweet text in prompt", async () => {
     const mockFetch = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ response: "liev" }),
+      json: async () => ({ message: { content: "liev" } }),
     });
     vi.stubGlobal("fetch", mockFetch);
 
@@ -355,8 +421,9 @@ describe("classifyContentWithLLM", () => {
     });
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.prompt).toContain("smoothie bowl");
-    expect(body.prompt).toContain("Tweet content:");
+    const prompt = body.messages[0].content;
+    expect(prompt).toContain("smoothie bowl");
+    expect(prompt).toContain("Tweet content:");
   });
 });
 
@@ -369,7 +436,7 @@ describe("resolveTwitterContent", () => {
   });
 
   it("extracts tweet ID from x.com URL", async () => {
-    vi.mock("../process/exec.js", () => ({
+    vi.mock("../../process/exec.js", () => ({
       runExec: vi.fn().mockResolvedValue({
         stdout: "This is tweet text about supplements",
         stderr: "",
@@ -433,7 +500,7 @@ describe("resolveContentRouteWithStickiness", () => {
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ response: "liev" }),
+        json: async () => ({ message: { content: "liev" } }),
       }),
     );
 
@@ -451,7 +518,7 @@ describe("resolveContentRouteWithStickiness", () => {
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ response: "main" }),
+        json: async () => ({ message: { content: "main" } }),
       }),
     );
 

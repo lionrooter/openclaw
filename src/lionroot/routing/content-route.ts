@@ -5,14 +5,15 @@
  * to route inbound messages to the most appropriate agent based
  * on message content rather than sender/channel bindings.
  */
-import type { OpenClawConfig } from "../config/config.js";
-import { logDebug } from "../logger.js";
-import { runExec } from "../process/exec.js";
+import type { OpenClawConfig } from "../../config/config.js";
+import { logDebug } from "../../logger.js";
+import { runExec } from "../../process/exec.js";
+import { buildAgentSessionKey, pickFirstExistingAgentId } from "../../routing/resolve-route.js";
 import { resolveWithStickiness, type ContentConfidence } from "./content-session-sticky.js";
-import { buildAgentSessionKey, pickFirstExistingAgentId } from "./resolve-route.js";
 
 export type ContentRouteResult = {
   agentId: string;
+  category?: string;
   confidence: ContentConfidence;
   reason: string;
 };
@@ -30,10 +31,10 @@ const DEFAULT_OLLAMA_URL = "http://localhost:11434";
 const DEFAULT_STICKY_TIMEOUT_MS = 600_000; // 10 minutes
 
 // URL extraction regex — matches http/https URLs
-const URL_RE = /https?:\/\/[^\s<>)"']+/gi;
+export const URL_RE = /https?:\/\/[^\s<>)"']+/gi;
 
 // X/Twitter URL patterns
-const TWITTER_STATUS_RE = /(?:twitter\.com|x\.com)\/[^/]+\/status\/(\d+)/i;
+export const TWITTER_STATUS_RE = /(?:twitter\.com|x\.com)\/[^/]+\/status\/(\d+)/i;
 
 // GitHub URL pattern
 const GITHUB_RE = /github\.com\//i;
@@ -113,6 +114,20 @@ export async function resolveTwitterContent(
 }
 
 /**
+ * Parse an LLM response that may contain "agent" or "agent:category".
+ * Strips non-alphanumeric chars from each part.
+ */
+export function parseAgentCategory(raw: string): { agentId: string; category?: string } {
+  const colonIdx = raw.indexOf(":");
+  if (colonIdx === -1) {
+    return { agentId: raw.replace(/[^a-z0-9_-]/g, "") };
+  }
+  const agentId = raw.slice(0, colonIdx).replace(/[^a-z0-9_-]/g, "");
+  const category = raw.slice(colonIdx + 1).replace(/[^a-z0-9_-]/g, "");
+  return { agentId, category: category || undefined };
+}
+
+/**
  * Classify message content using an Ollama LLM.
  * Sends a single-shot prompt asking the model to pick the best agent.
  */
@@ -145,16 +160,17 @@ ${agentLines}
 Message:
 ${messageContext}
 
-Reply with ONLY the agent name (lowercase, no explanation). If unsure, reply "main".`;
+Reply with ONLY the agent name, optionally followed by a colon and content category. Examples: "liev", "liev:intake", "cody:review". If unsure, reply "main".`;
 
   try {
-    const response = await fetch(`${opts.ollamaUrl}/api/generate`, {
+    const response = await fetch(`${opts.ollamaUrl}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: opts.model,
-        prompt,
+        messages: [{ role: "user", content: prompt }],
         stream: false,
+        think: false,
         options: {
           temperature: 0.1,
           num_predict: 20,
@@ -168,18 +184,20 @@ Reply with ONLY the agent name (lowercase, no explanation). If unsure, reply "ma
       return { agentId: "main", confidence: "low", reason: "LLM error" };
     }
 
-    const data = (await response.json()) as { response?: string };
-    const rawResponse = (data.response ?? "").trim().toLowerCase();
-    // Extract just the agent name — strip any extra text/punctuation
-    const agentId = rawResponse.replace(/[^a-z0-9_-]/g, "");
+    const data = (await response.json()) as { message?: { content?: string } };
+    const rawResponse = (data.message?.content ?? "").trim().toLowerCase();
+    // Parse agent:category format — split on first colon
+    const parsed = parseAgentCategory(rawResponse);
 
-    if (agentId && agentId in opts.agentDescriptions) {
-      // Determine confidence: if the response was just the agent name, high confidence
-      const isClean = rawResponse === agentId;
+    if (parsed.agentId && parsed.agentId in opts.agentDescriptions) {
+      // Determine confidence: if the response was clean (just agent or agent:category), high confidence
+      const isClean =
+        rawResponse === (parsed.category ? `${parsed.agentId}:${parsed.category}` : parsed.agentId);
       return {
-        agentId,
+        agentId: parsed.agentId,
+        category: parsed.category,
         confidence: isClean ? "high" : "medium",
-        reason: `LLM classified as ${opts.agentDescriptions[agentId]?.split(",")[0] ?? agentId}`,
+        reason: `LLM classified as ${opts.agentDescriptions[parsed.agentId]?.split(",")[0] ?? parsed.agentId}`,
       };
     }
 

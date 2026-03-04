@@ -528,11 +528,12 @@ function resolveCooldownDecision(params: {
   }
 
   // For primary: try when requested model or when probe allows.
-  // For same-provider fallbacks: only relax cooldown on rate_limit, which
-  // is commonly model-scoped and can recover on a sibling model.
+  // For same-provider fallbacks: relax cooldown on rate_limit (commonly
+  // model-scoped) and model_not_found (model-specific, not provider-wide).
   const shouldAttemptDespiteCooldown =
     (params.isPrimary && (!params.requestedModel || shouldProbe)) ||
-    (!params.isPrimary && inferredReason === "rate_limit");
+    (!params.isPrimary &&
+      (inferredReason === "rate_limit" || inferredReason === "model_not_found"));
   if (!shouldAttemptDespiteCooldown) {
     return {
       type: "skip",

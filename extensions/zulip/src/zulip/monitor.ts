@@ -24,6 +24,8 @@ import {
   shouldAckReaction as shouldAckReactionGate,
   type HistoryEntry,
 } from "openclaw/plugin-sdk";
+import { resolveReplyFormattingMode } from "../../../../src/lionroot/config/reply-formatting.js";
+import { formatReplyForChannel } from "../../../../src/lionroot/infra/format-reply.js";
 import { getZulipRuntime } from "../runtime.js";
 import type { ZulipXCaseConfig } from "../types.js";
 import { resolveZulipAccount } from "./accounts.js";
@@ -1688,10 +1690,20 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
       return;
     }
 
-    // Fire-and-forget: expand X/Twitter links into quote replies
-    void expandTweetsInMessage({ client, msg, logVerbose }).catch((err) =>
-      logVerbose(`zulip: tweet expansion error: ${err}`),
-    );
+    // Fire-and-forget: expand X/Twitter links — only for the stream-owning bot
+    const tweetStreamName = typeof msg.display_recipient === "string" ? msg.display_recipient : "";
+    const tweetStreamOwner =
+      tweetStreamName &&
+      !(
+        account.config.streams?.[tweetStreamName]?.requireMention ??
+        account.config.requireMention ??
+        true
+      );
+    if (tweetStreamOwner) {
+      void expandTweetsInMessage({ client, msg, logVerbose }).catch((err) =>
+        logVerbose(`zulip: tweet expansion error: ${err}`),
+      );
+    }
 
     const kind = messageKind(msg);
     const cType = chatType(kind);
@@ -2510,6 +2522,12 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
     // When draft streaming is active, suppress block streaming to avoid double-streaming.
     const disableBlockStreamingForDraft = draftStream ? true : undefined;
 
+    const formattingMode = resolveReplyFormattingMode({
+      cfg,
+      channel: "zulip",
+      accountId: account.accountId,
+    });
+
     const { dispatcher, replyOptions, markDispatchIdle } =
       core.channel.reply.createReplyDispatcherWithTyping({
         responsePrefix: prefixContext.responsePrefix,
@@ -2518,7 +2536,8 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
         deliver: async (payload: ReplyPayload, info) => {
           const isFinal = info.kind === "final";
           const mediaUrls = payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
-          const text = core.channel.text.convertMarkdownTables(payload.text ?? "", tableMode);
+          const rawText = core.channel.text.convertMarkdownTables(payload.text ?? "", tableMode);
+          const text = formatReplyForChannel(rawText, formattingMode);
 
           if (draftStream && isFinal) {
             await flushDraft();
