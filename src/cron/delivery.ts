@@ -7,6 +7,7 @@ import { deliverOutboundPayloads } from "../infra/outbound/deliver.js";
 import { resolveAgentOutboundIdentity } from "../infra/outbound/identity.js";
 import { buildOutboundSessionContext } from "../infra/outbound/session-context.js";
 import { getChildLogger } from "../logging.js";
+import { expandDeliveryTokens } from "./delivery-tokens.js";
 import { resolveDeliveryTarget } from "./isolated-agent/delivery-target.js";
 import type { CronDelivery, CronDeliveryMode, CronJob, CronMessageChannel } from "./types.js";
 
@@ -71,7 +72,8 @@ export function resolveCronDeliveryPlan(job: CronJob): CronDeliveryPlan {
   );
   const deliveryTo = normalizeTo((delivery as { to?: unknown } | undefined)?.to);
   const channel = deliveryChannel ?? payloadChannel ?? "last";
-  const to = deliveryTo ?? payloadTo;
+  const rawTo = deliveryTo ?? payloadTo;
+  const to = rawTo ? expandDeliveryTokens(rawTo) : rawTo;
   const deliveryAccountId = normalizeAccountId(
     (delivery as { accountId?: unknown } | undefined)?.accountId,
   );
