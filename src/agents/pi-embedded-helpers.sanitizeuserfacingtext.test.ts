@@ -80,6 +80,12 @@ describe("sanitizeUserFacingText", () => {
     );
   });
 
+  it("rewrites provider 200-response parser failures into a friendly message", () => {
+    expect(sanitizeUserFacingText("provider error in 200 response", { errorContext: true })).toBe(
+      "The AI provider returned an invalid response. Please try again.",
+    );
+  });
+
   it.each([
     {
       input: "Hello there!\n\nHello there!",

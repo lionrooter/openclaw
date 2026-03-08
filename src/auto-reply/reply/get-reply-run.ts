@@ -9,14 +9,13 @@ import {
 } from "../../agents/pi-embedded.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import {
-  resolveGroupSessionKey,
   resolveSessionFilePath,
   resolveSessionFilePathOptions,
   type SessionEntry,
   updateSessionStore,
 } from "../../config/sessions.js";
-import { normalizeChatType } from "../../channels/chat-type.js";
 import { logVerbose } from "../../globals.js";
+import { resolveZulipFollowupGroupId } from "../../lionroot/zulip-dm-resolve.js";
 import { clearCommandLane, getQueueSize } from "../../process/command-queue.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
 import { isReasoningTagProvider } from "../../utils/provider-utils.js";
@@ -220,25 +219,6 @@ export async function runPreparedReply(
     workspaceDir,
     sessionStore,
   } = params;
-  const normalizeZulipDmGroupId = (value: string | undefined) => {
-    if (!value) return undefined;
-    const trimmed = value.trim().toLowerCase();
-    if (!trimmed) return undefined;
-    const withoutRoot = trimmed.replace(/^(?:zulip|user):/i, "");
-    const withoutUser = withoutRoot.replace(/^user:/i, "");
-    return withoutUser.trim().toLowerCase() || undefined;
-  };
-  const resolveFollowupGroupId = () => {
-    const resolvedBySession = resolveGroupSessionKey(sessionCtx)?.id;
-    if (resolvedBySession) {
-      return resolvedBySession;
-    }
-    const normalizedChatType = normalizeChatType(sessionCtx.ChatType);
-    if (sessionCtx.Provider?.trim().toLowerCase() !== "zulip" || normalizedChatType !== "direct") {
-      return undefined;
-    }
-    return normalizeZulipDmGroupId(sessionCtx.From) ?? normalizeZulipDmGroupId(sessionCtx.SenderId);
-  };
   let {
     sessionEntry,
     resolvedThinkLevel,
@@ -503,7 +483,7 @@ export async function runPreparedReply(
         provider: ctx.Provider ?? ctx.Surface ?? sessionCtx.Provider,
       }),
       agentAccountId: sessionCtx.AccountId,
-      groupId: resolveFollowupGroupId(),
+      groupId: resolveZulipFollowupGroupId(sessionCtx),
       groupChannel: sessionCtx.GroupChannel?.trim() ?? sessionCtx.GroupSubject?.trim(),
       groupSpace: sessionCtx.GroupSpace?.trim() ?? undefined,
       senderId: sessionCtx.SenderId?.trim() || undefined,

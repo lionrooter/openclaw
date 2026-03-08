@@ -67,4 +67,33 @@ describe("resolveEmbeddedRunSkillEntries", () => {
     });
     expect(hoisted.loadWorkspaceSkillEntries).not.toHaveBeenCalled();
   });
+
+  it("reloads skill entries when snapshot skill paths point outside the current workspace", () => {
+    const config: OpenClawConfig = { skills: {} };
+    const snapshot: SkillSnapshot = {
+      prompt: "skills prompt",
+      skills: [{ name: "summarize" }],
+      resolvedSkills: [
+        {
+          name: "summarize",
+          description: "Summarize URLs",
+          filePath: "/Users/lionheart/.codex/skills/summarize/SKILL.md",
+          baseDir: "/Users/lionheart/.codex/skills/summarize",
+        },
+      ] as SkillSnapshot["resolvedSkills"],
+    };
+
+    const result = resolveEmbeddedRunSkillEntries({
+      workspaceDir: "/Users/lionheart/.openclaw/sandboxes/agent-leo-0bceecbe",
+      config,
+      skillsSnapshot: snapshot,
+    });
+
+    expect(result.shouldLoadSkillEntries).toBe(true);
+    expect(hoisted.loadWorkspaceSkillEntries).toHaveBeenCalledTimes(1);
+    expect(hoisted.loadWorkspaceSkillEntries).toHaveBeenCalledWith(
+      "/Users/lionheart/.openclaw/sandboxes/agent-leo-0bceecbe",
+      { config },
+    );
+  });
 });

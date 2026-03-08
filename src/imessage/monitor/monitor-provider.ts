@@ -24,6 +24,7 @@ import { readSessionUpdatedAt, resolveStorePath } from "../../config/sessions.js
 import { danger, logVerbose, shouldLogVerbose, warn } from "../../globals.js";
 import { normalizeScpRemoteHost } from "../../infra/scp-host.js";
 import { waitForTransportReady } from "../../infra/transport-ready.js";
+import { handleContentIntake } from "../../lionroot/content-intake.js";
 import {
   isInboundPathAllowed,
   resolveIMessageAttachmentRoots,
@@ -35,10 +36,6 @@ import {
   readChannelAllowFromStore,
   upsertChannelPairingRequest,
 } from "../../pairing/pairing-store.js";
-import {
-  applyContentRouteOverride,
-  resolveContentRoutingConfig,
-} from "../../routing/content-route.js";
 import { resolvePinnedMainDmOwnerFromAllowlist } from "../../security/dm-policy-shared.js";
 import { truncateUtf16Safe } from "../../utils.js";
 import { resolveIMessageAccount } from "../accounts.js";
@@ -59,6 +56,14 @@ import { normalizeAllowList, resolveRuntime } from "./runtime.js";
 import type { IMessagePayload, MonitorIMessageOpts } from "./types.js";
 
 const IMESSAGE_REPLY_TIMEOUT_SECONDS = 90;
+
+export function shouldIgnoreIMessageInboundAttachment(attachmentPath?: string | null): boolean {
+  const normalized = attachmentPath?.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return normalized.endsWith(".pluginpayloadattachment");
+}
 
 /**
  * Try to detect remote host from an SSH wrapper script like:
@@ -216,6 +221,10 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       if (!attachmentPath || entry?.missing) {
         return false;
       }
+      if (shouldIgnoreIMessageInboundAttachment(attachmentPath)) {
+        logVerbose(`imessage: ignoring opaque inbound attachment: ${attachmentPath}`);
+        return false;
+      }
       if (isInboundPathAllowed({ filePath: attachmentPath, roots: effectiveAttachmentRoots })) {
         return true;
       }
@@ -302,28 +311,31 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       return;
     }
 
-    // Content-based routing override: classify message content to pick the right agent.
-    const contentRoutingCfg = resolveContentRoutingConfig(cfg);
-    if (contentRoutingCfg) {
-      const contentOverride = await applyContentRouteOverride({
-        cfg,
-        contentRoutingCfg,
-        text: bodyText,
-        mediaType,
-        peer: decision.senderNormalized,
-        isGroup: decision.isGroup,
-        accountId: accountInfo.accountId,
-        dmScope: cfg.session?.dmScope,
-        logVerbose,
-      });
-      if (contentOverride) {
-        decision.route = {
-          ...decision.route,
-          agentId: contentOverride.agentId,
-          sessionKey: contentOverride.sessionKey,
-          matchedBy: contentOverride.matchedBy,
-        };
-      }
+    // Content intake pipe: classify, forward to Zulip, and/or override agent route.
+    const intakeResult = await handleContentIntake({
+      cfg,
+      decision,
+      message,
+      bodyText,
+      mediaPath,
+      mediaType,
+      mediaPaths,
+      mediaTypes,
+      historyLimit,
+      groupHistories,
+      remoteHost,
+      accountInfo,
+      runtime,
+      client,
+      mediaMaxBytes,
+      textLimit,
+      sentMessageCache,
+      chatId,
+      sender: decision.sender,
+      sendMessage: sendMessageIMessage,
+    });
+    if (intakeResult.handled) {
+      return;
     }
 
     const storePath = resolveStorePath(cfg.session?.store, {
@@ -452,7 +464,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       runtime.error?.(danger(`imessage dispatch failed: ${String(err)}`));
     }
 
-    if (!hasDeliveredReply || !didDeliverAnyReply) {
+    if (!hasDeliveredReply && !didDeliverAnyReply) {
       await deliverReplies({
         replies: [
           {

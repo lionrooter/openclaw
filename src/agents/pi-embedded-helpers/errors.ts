@@ -453,6 +453,10 @@ export function formatRawAssistantErrorForUi(raw?: string): string {
     return "LLM request failed with an unknown error.";
   }
 
+  if (/provider error in 200 response/i.test(trimmed)) {
+    return "The AI provider returned an invalid response. Please try again.";
+  }
+
   const leadingStatus = extractLeadingHttpStatus(trimmed);
   if (leadingStatus && isCloudflareOrHtmlErrorPage(trimmed)) {
     return `The AI service is temporarily unavailable (HTTP ${leadingStatus.code}). Please try again in a moment.`;
@@ -597,6 +601,10 @@ export function sanitizeUserFacingText(text: string, opts?: { errorContext?: boo
 
     if (isBillingErrorMessage(trimmed)) {
       return BILLING_ERROR_USER_MESSAGE;
+    }
+
+    if (/provider error in 200 response/i.test(trimmed)) {
+      return "The AI provider returned an invalid response. Please try again.";
     }
 
     if (isRawApiErrorPayload(trimmed) || isLikelyHttpErrorText(trimmed)) {
@@ -778,6 +786,9 @@ function isCliSessionExpiredErrorMessage(raw: string): boolean {
 }
 
 export function classifyFailoverReason(raw: string): FailoverReason | null {
+  if (process.env.OPENCLAW_FAILOVER_DEBUG === "1") {
+    log.error(`[failover-debug][classify] raw=${JSON.stringify(raw)}`);
+  }
   if (isImageDimensionErrorMessage(raw)) {
     return null;
   }

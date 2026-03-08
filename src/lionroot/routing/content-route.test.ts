@@ -239,6 +239,7 @@ describe("resolveContentRoutingConfig", () => {
           model: "qwen3:14b",
           ollamaUrl: "http://localhost:11434",
           stickyTimeoutMs: 300_000,
+          defaultAgentId: "leo",
           agents: { liev: "Health", cody: "Code" },
         },
       },
@@ -247,6 +248,7 @@ describe("resolveContentRoutingConfig", () => {
     expect(result).not.toBeNull();
     expect(result!.model).toBe("qwen3:14b");
     expect(result!.stickyTimeoutMs).toBe(300_000);
+    expect(result!.defaultAgentId).toBe("leo");
     expect(result!.agents).toEqual({ liev: "Health", cody: "Code" });
   });
 });

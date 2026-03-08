@@ -37,13 +37,11 @@ export type AgentConfig = {
   workflowLane?: WorkflowLaneConfig;
 };
 
-export type ContentRoutingConfig = {
-  enabled?: boolean;
-  model?: string;
-  ollamaUrl?: string;
-  stickyTimeoutMs?: number;
-  agents?: Record<string, string>;
-};
+export type {
+  ContentForwardConfig,
+  ContentRoutingConfig,
+} from "../lionroot/config/content-routing-schema.js";
+import type { ContentRoutingConfig } from "../lionroot/config/content-routing-schema.js";
 
 export type AgentsConfig = {
   defaults?: AgentDefaultsConfig;

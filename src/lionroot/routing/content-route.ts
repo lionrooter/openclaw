@@ -23,6 +23,7 @@ export type ContentRoutingConfig = {
   model?: string;
   ollamaUrl?: string;
   stickyTimeoutMs?: number;
+  defaultAgentId?: string;
   agents: Record<string, string>;
 };
 
@@ -57,6 +58,7 @@ export function resolveContentRoutingConfig(cfg: OpenClawConfig): ContentRouting
     model: cr.model,
     ollamaUrl: cr.ollamaUrl,
     stickyTimeoutMs: cr.stickyTimeoutMs,
+    defaultAgentId: typeof cr.defaultAgentId === "string" ? cr.defaultAgentId.trim() : undefined,
     agents,
   };
 }

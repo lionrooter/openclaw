@@ -575,9 +575,10 @@ export async function runEmbeddedAttempt(
       config: params.config,
       skillsSnapshot: params.skillsSnapshot,
     });
-    restoreSkillEnv = params.skillsSnapshot
+    const effectiveSkillsSnapshot = shouldLoadSkillEntries ? undefined : params.skillsSnapshot;
+    restoreSkillEnv = effectiveSkillsSnapshot
       ? applySkillEnvOverridesFromSnapshot({
-          snapshot: params.skillsSnapshot,
+          snapshot: effectiveSkillsSnapshot,
           config: params.config,
         })
       : applySkillEnvOverrides({
@@ -586,7 +587,7 @@ export async function runEmbeddedAttempt(
         });
 
     const skillsPrompt = resolveSkillsPromptForRun({
-      skillsSnapshot: params.skillsSnapshot,
+      skillsSnapshot: effectiveSkillsSnapshot,
       entries: shouldLoadSkillEntries ? skillEntries : undefined,
       config: params.config,
       workspaceDir: effectiveWorkspace,

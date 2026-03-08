@@ -497,6 +497,8 @@ describe("classifyFailoverReason", () => {
     expect(classifyFailoverReason("request ended without sending any chunks")).toBe("timeout");
     expect(classifyFailoverReason("Connection error.")).toBe("timeout");
     expect(classifyFailoverReason("fetch failed")).toBe("timeout");
+    expect(classifyFailoverReason("provider error in 200 response")).toBe("timeout");
+    expect(isFailoverErrorMessage("provider error in 200 response")).toBe(true);
     expect(classifyFailoverReason("network error: ECONNREFUSED")).toBe("timeout");
     expect(
       classifyFailoverReason("dial tcp: lookup api.example.com: no such host (ENOTFOUND)"),

@@ -27,6 +27,8 @@ import {
   toPluginMessageSentEvent,
 } from "../../hooks/message-hook-mappers.js";
 import type { sendMessageIMessage } from "../../imessage/send.js";
+import { resolveReplyFormattingMode } from "../../lionroot/config/reply-formatting.js";
+import { formatReplyForChannel } from "../../lionroot/infra/format-reply.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
@@ -645,7 +647,18 @@ async function deliverOutboundPayloadsCore(
       })),
     };
   };
-  const normalizedPayloads = normalizePayloadsForChannelDelivery(payloads, channel);
+  const rawNormalizedPayloads = normalizePayloadsForChannelDelivery(payloads, channel);
+
+  // Per-channel reply formatting (italicize reasoning in markdown channels, parenthesize in compact channels)
+  const formattingMode = resolveReplyFormattingMode({ cfg, channel, accountId });
+  const normalizedPayloads =
+    formattingMode === "off"
+      ? rawNormalizedPayloads
+      : rawNormalizedPayloads.map((p) => ({
+          ...p,
+          text: p.text ? formatReplyForChannel(p.text, formattingMode) : p.text,
+        }));
+
   const hookRunner = getGlobalHookRunner();
   const sessionKeyForInternalHooks = params.mirror?.sessionKey ?? params.session?.key;
   const mirrorIsGroup = params.mirror?.isGroup;
