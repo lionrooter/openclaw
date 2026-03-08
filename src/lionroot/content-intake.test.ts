@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import {
@@ -279,6 +282,30 @@ describe("handleContentIntake forwarded agent routing", () => {
       expect.anything(),
       expect.stringContaining("provider error in 200 response"),
       expect.anything(),
+    );
+  });
+
+  it("passes readable attachment text into content classification", async () => {
+    const params = createParams();
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-content-intake-"));
+    const textPath = path.join(tempDir, "PastedText.txt");
+    await fs.writeFile(
+      textPath,
+      "Bryan wants Cody to review this infrastructure bug report.",
+      "utf8",
+    );
+    params.mediaPaths = [textPath];
+    params.mediaTypes = ["text/plain"];
+    params.mediaType = "text/plain";
+    params.mediaPath = textPath;
+
+    await handleContentIntake(params);
+
+    expect(mockClassifyContentWithLLM).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mediaType: "text/plain",
+        attachmentText: expect.stringContaining("infrastructure bug report"),
+      }),
     );
   });
 });

@@ -261,9 +261,24 @@ export async function processZulipUploads(
             attachmentLines.push(`📎 File "${upload.name}": ${downloaded.length} bytes`);
           }
         } else {
-          attachmentLines.push(
-            `📎 File "${upload.name}" (${Math.round(downloaded.length / 1024)} KB — too large to inline)`,
-          );
+          const saved = await saveMedia({
+            buffer: downloaded,
+            contentType: download.contentType,
+            fileName: upload.name,
+          }).catch(() => null);
+          if (saved) {
+            mediaPaths.push(saved.path);
+            if (saved.contentType) {
+              mediaTypes.push(saved.contentType);
+            }
+            attachmentLines.push(
+              `📎 File "${upload.name}" (${Math.round(downloaded.length / 1024)} KB — too large to inline; cached for model analysis)`,
+            );
+          } else {
+            attachmentLines.push(
+              `📎 File "${upload.name}" (${Math.round(downloaded.length / 1024)} KB — too large to inline; failed to cache for model analysis)`,
+            );
+          }
         }
       } else {
         attachmentLines.push(`📎 Attachment "${upload.name}": prepared for model analysis`);

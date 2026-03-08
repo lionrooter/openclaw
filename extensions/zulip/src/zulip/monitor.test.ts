@@ -148,6 +148,38 @@ describe("processZulipUploads", () => {
     expect(saveMedia).not.toHaveBeenCalled();
   });
 
+  it("caches large text uploads for model analysis", async () => {
+    const largeText = "A".repeat(120_000);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(largeText, {
+        status: 200,
+        headers: {
+          "content-type": "text/plain",
+          "content-length": String(largeText.length),
+        },
+      }),
+    );
+
+    const saved = {
+      path: "/tmp/media/PastedText.txt",
+      contentType: "text/plain",
+    };
+    const saveMedia = vi.fn(async () => saved);
+
+    const result = await processZulipUploads(
+      DUMMY_CLIENT,
+      "Read this [PastedText.txt](/user_uploads/PastedText.txt)",
+      200_000,
+      saveMedia,
+    );
+
+    expect(result.mediaPaths).toEqual([saved.path]);
+    expect(result.mediaTypes).toEqual([saved.contentType]);
+    expect(result.strippedContent).toContain("[attached: PastedText.txt]");
+    expect(result.attachmentInfo).toContain("too large to inline; cached for model analysis");
+    expect(saveMedia).toHaveBeenCalledTimes(1);
+  });
+
   it("marks oversized uploads as skipped", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("oversized", {

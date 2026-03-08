@@ -5,6 +5,8 @@
  * upstream diff. The upstream file now calls handleContentIntake() with
  * a single ~8 line hook instead of ~200 lines of inline logic.
  */
+import fs from "node:fs/promises";
+import path from "node:path";
 import { resolveHumanDelayConfig } from "../agents/identity.js";
 import { dispatchInboundMessage } from "../auto-reply/dispatch.js";
 import type { HistoryEntry } from "../auto-reply/reply/history.js";
@@ -52,6 +54,79 @@ const IMESSAGE_REPLY_TIMEOUT_SECONDS = 90;
 const DEFAULT_CONTENT_FORWARD_AGENT_ID = "leo";
 const FORWARDED_AGENT_FAILURE_SUMMARY =
   "⚠️ Forwarded to Zulip, but the agent hit a provider error while processing it. Retry the thread if needed.";
+const MAX_ROUTING_ATTACHMENT_TEXT_CHARS = 12_000;
+const MAX_ROUTING_ATTACHMENT_FILES = 2;
+const TEXT_ATTACHMENT_EXTENSIONS = new Set([
+  ".txt",
+  ".md",
+  ".log",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".xml",
+  ".csv",
+  ".tsv",
+]);
+
+function isTextLikeAttachment(params: { filePath: string; mediaType?: string }): boolean {
+  const normalizedType = params.mediaType?.split(";")[0]?.trim().toLowerCase();
+  if (normalizedType?.startsWith("text/")) {
+    return true;
+  }
+  if (
+    normalizedType === "application/json" ||
+    normalizedType === "application/xml" ||
+    normalizedType === "text/xml" ||
+    normalizedType === "application/yaml" ||
+    normalizedType === "text/yaml"
+  ) {
+    return true;
+  }
+  return TEXT_ATTACHMENT_EXTENSIONS.has(path.extname(params.filePath).toLowerCase());
+}
+
+async function extractAttachmentTextForRouting(params: {
+  mediaPaths: string[];
+  mediaTypes: Array<string | undefined>;
+}): Promise<string | undefined> {
+  if (!params.mediaPaths.length) {
+    return undefined;
+  }
+  const sections: string[] = [];
+  let remaining = MAX_ROUTING_ATTACHMENT_TEXT_CHARS;
+
+  for (let index = 0; index < params.mediaPaths.length; index += 1) {
+    if (sections.length >= MAX_ROUTING_ATTACHMENT_FILES || remaining <= 0) {
+      break;
+    }
+    const filePath = params.mediaPaths[index];
+    if (!filePath) {
+      continue;
+    }
+    const mediaType = params.mediaTypes[index];
+    if (!isTextLikeAttachment({ filePath, mediaType })) {
+      continue;
+    }
+    try {
+      const buffer = await fs.readFile(filePath);
+      const text = buffer.toString("utf8").replaceAll("\u0000", "").trim();
+      if (!text) {
+        continue;
+      }
+      const fileName = path.basename(filePath);
+      const snippet = text.slice(0, remaining);
+      sections.push(`[Attachment: ${fileName}]\n${snippet}`);
+      remaining -= snippet.length;
+    } catch {
+      continue;
+    }
+  }
+
+  if (sections.length === 0) {
+    return undefined;
+  }
+  return sections.join("\n\n");
+}
 
 /**
  * Dispatch agent processing for a forwarded message, re-routing replies to Zulip.
@@ -461,11 +536,16 @@ export async function handleContentIntake(
         tweetUrl = bodyText.match(URL_RE)?.[0] ?? bodyText;
       }
     }
+    const attachmentText = await extractAttachmentTextForRouting({
+      mediaPaths,
+      mediaTypes,
+    });
 
     // 2. Classify content
     const classification = await classifyContentWithLLM({
       text: bodyText,
       mediaType,
+      attachmentText,
       tweetText,
       model: contentRoutingCfg.model ?? "qwen3.5:9b",
       ollamaUrl: contentRoutingCfg.ollamaUrl ?? "http://localhost:11434",

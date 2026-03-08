@@ -366,6 +366,28 @@ describe("classifyContentWithLLM", () => {
     expect(body.messages[0].content).toContain("image/jpeg attachment");
   });
 
+  it("includes attached text content in prompt", async () => {
+    const mockFetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ message: { content: "cody" } }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await classifyContentWithLLM({
+      text: "please route this",
+      mediaType: "text/plain",
+      attachmentText: "Stack trace line 1\nStack trace line 2",
+      model: "test-model",
+      ollamaUrl: "http://localhost:11434",
+      agentDescriptions: AGENT_DESCRIPTIONS,
+    });
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const prompt = body.messages[0].content;
+    expect(prompt).toContain("Attached text content:");
+    expect(prompt).toContain("Stack trace line 1");
+  });
+
   it("parses agent:category from LLM response", async () => {
     vi.stubGlobal(
       "fetch",

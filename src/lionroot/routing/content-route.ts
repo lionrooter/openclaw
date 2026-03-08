@@ -136,6 +136,7 @@ export function parseAgentCategory(raw: string): { agentId: string; category?: s
 export async function classifyContentWithLLM(opts: {
   text: string;
   mediaType?: string;
+  attachmentText?: string;
   tweetText?: string;
   model: string;
   ollamaUrl: string;
@@ -151,6 +152,9 @@ export async function classifyContentWithLLM(opts: {
   }
   if (opts.mediaType) {
     messageContext += `The message includes a ${opts.mediaType} attachment.\n`;
+  }
+  if (opts.attachmentText?.trim()) {
+    messageContext += `Attached text content:\n${opts.attachmentText.trim()}\n`;
   }
   messageContext += `User message: ${opts.text}`;
 
