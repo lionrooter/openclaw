@@ -31,6 +31,8 @@ export type BlockStreamingChunkConfig = {
   breakPreference?: "paragraph" | "newline" | "sentence";
 };
 
+export type ReplyFormattingMode = "full" | "compact" | "off";
+
 export type MarkdownTableMode = "off" | "bullets" | "code";
 
 export type MarkdownConfig = {
