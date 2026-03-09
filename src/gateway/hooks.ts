@@ -4,6 +4,7 @@ import { listAgentIds, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { listChannelPlugins } from "../channels/plugins/index.js";
 import type { ChannelId } from "../channels/plugins/types.js";
 import type { OpenClawConfig } from "../config/config.js";
+import type { CronAgentTurnContext } from "../cron/types.js";
 import { readJsonBodyWithLimit, requestBodyErrorToText } from "../infra/http-body.js";
 import { normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.js";
 import { normalizeMessageChannel } from "../utils/message-channel.js";
@@ -231,6 +232,7 @@ export type HookAgentPayload = {
   model?: string;
   thinking?: string;
   timeoutSeconds?: number;
+  context?: CronAgentTurnContext;
 };
 
 export type HookAgentDispatchPayload = Omit<HookAgentPayload, "sessionKey"> & {
@@ -239,6 +241,8 @@ export type HookAgentDispatchPayload = Omit<HookAgentPayload, "sessionKey"> & {
 };
 
 const listHookChannelValues = () => ["last", ...listChannelPlugins().map((plugin) => plugin.id)];
+const MAX_HOOK_CONTEXT_LIST_ITEMS = 100;
+const MAX_HOOK_CONTEXT_EXTRA_ENTRIES = 20;
 
 export type HookMessageChannel = ChannelId | "last";
 
@@ -257,6 +261,70 @@ export function resolveHookChannel(raw: unknown): HookMessageChannel | null {
     return null;
   }
   return normalized as HookMessageChannel;
+}
+
+function normalizeOptionalString(raw: unknown): string | undefined {
+  return typeof raw === "string" && raw.trim() ? raw.trim() : undefined;
+}
+
+function normalizeOptionalStringArray(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) {
+    return undefined;
+  }
+  const values = raw
+    .slice(0, MAX_HOOK_CONTEXT_LIST_ITEMS)
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter((value): value is string => Boolean(value));
+  return values.length > 0 ? values : undefined;
+}
+
+function sanitizeHookContextLabel(raw: string): string | undefined {
+  const cleaned = raw.replace(/[\r\n\t:]+/g, " ").trim();
+  return cleaned ? cleaned : undefined;
+}
+
+function sanitizeHookContextValue(raw: string): string | undefined {
+  const cleaned = raw.replace(/[\r\n\t]+/g, " ").trim();
+  return cleaned ? cleaned : undefined;
+}
+
+function normalizeOptionalStringRecord(raw: unknown): Record<string, string> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+  const record: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw).slice(0, MAX_HOOK_CONTEXT_EXTRA_ENTRIES)) {
+    const normalizedKey = sanitizeHookContextLabel(key);
+    const normalizedValue = typeof value === "string" ? sanitizeHookContextValue(value) : undefined;
+    if (!normalizedKey || !normalizedValue) {
+      continue;
+    }
+    record[normalizedKey] = normalizedValue;
+  }
+  return Object.keys(record).length > 0 ? record : undefined;
+}
+
+export function normalizeHookAgentContext(raw: unknown): CronAgentTurnContext | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+  const payload = raw as Record<string, unknown>;
+  const context: CronAgentTurnContext = {
+    source: normalizeOptionalString(payload.source),
+    runId: normalizeOptionalString(payload.runId),
+    agentId: normalizeOptionalString(payload.agentId),
+    companyId: normalizeOptionalString(payload.companyId),
+    taskId: normalizeOptionalString(payload.taskId),
+    issueId: normalizeOptionalString(payload.issueId),
+    issueIds: normalizeOptionalStringArray(payload.issueIds),
+    approvalId: normalizeOptionalString(payload.approvalId),
+    approvalStatus: normalizeOptionalString(payload.approvalStatus),
+    wakeReason: normalizeOptionalString(payload.wakeReason),
+    wakeCommentId: normalizeOptionalString(payload.wakeCommentId),
+    extra: normalizeOptionalStringRecord(payload.extra),
+  };
+
+  return Object.values(context).some((value) => value !== undefined) ? context : undefined;
 }
 
 export function resolveHookDeliver(raw: unknown): boolean {
@@ -390,6 +458,7 @@ export function normalizeAgentPayload(payload: Record<string, unknown>):
     typeof timeoutRaw === "number" && Number.isFinite(timeoutRaw) && timeoutRaw > 0
       ? Math.floor(timeoutRaw)
       : undefined;
+  const context = normalizeHookAgentContext(payload.context);
   return {
     ok: true,
     value: {
@@ -404,6 +473,7 @@ export function normalizeAgentPayload(payload: Record<string, unknown>):
       model,
       thinking,
       timeoutSeconds,
+      context,
     },
   };
 }

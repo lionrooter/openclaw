@@ -54,7 +54,7 @@ import {
   isExternalHookSession,
 } from "../../security/external-content.js";
 import { resolveCronDeliveryPlan } from "../delivery.js";
-import type { CronJob, CronRunOutcome, CronRunTelemetry } from "../types.js";
+import type { CronAgentTurnContext, CronJob, CronRunOutcome, CronRunTelemetry } from "../types.js";
 import {
   dispatchCronDelivery,
   matchesMessagingToolDeliveryTarget,
@@ -188,6 +188,45 @@ function appendCronDeliveryInstruction(params: {
     return params.commandBody;
   }
   return `${params.commandBody}\n\nReturn your summary as plain text; it will be delivered automatically. If the task explicitly calls for messaging a specific external recipient, note who/where it should go instead of sending it yourself.`.trim();
+}
+
+function formatHookContextBlock(context: CronAgentTurnContext | undefined): string {
+  if (!context || typeof context !== "object") {
+    return "";
+  }
+
+  const lines: string[] = [];
+  const pushLine = (label: string, value: string | undefined) => {
+    if (typeof value === "string" && value.trim()) {
+      lines.push(`${label}: ${value.trim()}`);
+    }
+  };
+
+  pushLine("Source", context.source);
+  pushLine("Run ID", context.runId);
+  pushLine("Agent ID", context.agentId);
+  pushLine("Company ID", context.companyId);
+  pushLine("Task ID", context.taskId);
+  pushLine("Issue ID", context.issueId);
+  if (Array.isArray(context.issueIds) && context.issueIds.length > 0) {
+    lines.push(`Issue IDs: ${context.issueIds.join(", ")}`);
+  }
+  pushLine("Approval ID", context.approvalId);
+  pushLine("Approval status", context.approvalStatus);
+  pushLine("Wake reason", context.wakeReason);
+  pushLine("Wake comment ID", context.wakeCommentId);
+
+  if (context.extra && typeof context.extra === "object") {
+    for (const [key, value] of Object.entries(context.extra).toSorted(([a], [b]) =>
+      a.localeCompare(b),
+    )) {
+      if (typeof value === "string" && value.trim()) {
+        lines.push(`${key}: ${value.trim()}`);
+      }
+    }
+  }
+
+  return lines.length > 0 ? `Task context:\n${lines.join("\n")}` : "";
 }
 
 export async function runCronIsolatedAgentTurn(params: {
@@ -428,7 +467,11 @@ export async function runCronIsolatedAgentTurn(params: {
   });
 
   const { formattedTime, timeLine } = resolveCronStyleNow(params.cfg, now);
-  const base = `[cron:${params.job.id} ${params.job.name}] ${params.message}`.trim();
+  const contextBlock = formatHookContextBlock(agentPayload?.context);
+  const base = [`[cron:${params.job.id} ${params.job.name}] ${params.message}`.trim(), contextBlock]
+    .filter(Boolean)
+    .join("\n\n");
+  const externalContent = [params.message, contextBlock].filter(Boolean).join("\n\n");
 
   // SECURITY: Wrap external hook content with security boundaries to prevent prompt injection
   // unless explicitly allowed via a dangerous config override.
@@ -441,7 +484,7 @@ export async function runCronIsolatedAgentTurn(params: {
 
   if (isExternalHook) {
     // Log suspicious patterns for security monitoring
-    const suspiciousPatterns = detectSuspiciousPatterns(params.message);
+    const suspiciousPatterns = detectSuspiciousPatterns(externalContent);
     if (suspiciousPatterns.length > 0) {
       logWarn(
         `[security] Suspicious patterns detected in external hook content ` +
@@ -454,7 +497,7 @@ export async function runCronIsolatedAgentTurn(params: {
     // Wrap external content with security boundaries
     const hookType = getHookType(baseSessionKey);
     const safeContent = buildSafeExternalPrompt({
-      content: params.message,
+      content: externalContent,
       source: hookType,
       jobName: params.job.name,
       jobId: params.job.id,

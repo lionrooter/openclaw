@@ -106,6 +106,32 @@ describe("gateway server hooks", () => {
       drainSystemEvents(resolveMainKey());
 
       mockIsolatedRunOkOnce();
+      const resAgentWithContext = await postHook(port, "/hooks/agent", {
+        message: "Do it",
+        name: "Email",
+        context: {
+          source: "paperclip",
+          taskId: "task-42",
+          issueId: "issue-7",
+          issueIds: ["issue-7", "issue-8"],
+          wakeReason: "approval-needed",
+        },
+      });
+      expect(resAgentWithContext.status).toBe(200);
+      await waitForSystemEvent();
+      const contextCall = (cronIsolatedRun.mock.calls[0] as unknown[] | undefined)?.[0] as {
+        job?: { payload?: { context?: unknown } };
+      };
+      expect(contextCall?.job?.payload?.context).toEqual({
+        source: "paperclip",
+        taskId: "task-42",
+        issueId: "issue-7",
+        issueIds: ["issue-7", "issue-8"],
+        wakeReason: "approval-needed",
+      });
+      drainSystemEvents(resolveMainKey());
+
+      mockIsolatedRunOkOnce();
       const resAgentUnknown = await postHook(port, "/hooks/agent", {
         message: "Do it",
         name: "Email",

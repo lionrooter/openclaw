@@ -81,6 +81,21 @@ export type CronPayload = { kind: "systemEvent"; text: string } | CronAgentTurnP
 
 export type CronPayloadPatch = { kind: "systemEvent"; text?: string } | CronAgentTurnPayloadPatch;
 
+export type CronAgentTurnContext = {
+  source?: string;
+  runId?: string;
+  agentId?: string;
+  companyId?: string;
+  taskId?: string;
+  issueId?: string;
+  issueIds?: string[];
+  approvalId?: string;
+  approvalStatus?: string;
+  wakeReason?: string;
+  wakeCommentId?: string;
+  extra?: Record<string, string>;
+};
+
 type CronAgentTurnPayloadFields = {
   message: string;
   /** Optional model override (provider/model or alias). */
@@ -96,6 +111,7 @@ type CronAgentTurnPayloadFields = {
   channel?: CronMessageChannel;
   to?: string;
   bestEffortDeliver?: boolean;
+  context?: CronAgentTurnContext;
 };
 
 type CronAgentTurnPayload = {

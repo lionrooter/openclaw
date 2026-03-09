@@ -283,6 +283,35 @@ describe("runCronIsolatedAgentTurn", () => {
     });
   });
 
+  it("injects structured task context into the prompt before the time line", async () => {
+    await withTempHome(async (home) => {
+      await runCronTurn(home, {
+        jobPayload: {
+          kind: "agentTurn",
+          message: DEFAULT_MESSAGE,
+          deliver: false,
+          context: {
+            source: "paperclip",
+            taskId: "task-1",
+            issueId: "issue-9",
+            wakeReason: "approval-needed",
+          },
+        },
+      });
+
+      const call = vi.mocked(runEmbeddedPiAgent).mock.calls.at(-1)?.[0] as {
+        prompt?: string;
+      };
+      expect(call?.prompt).toContain("[cron:job-1");
+      expect(call?.prompt).toContain("Task context:");
+      expect(call?.prompt).toContain("Source: paperclip");
+      expect(call?.prompt).toContain("Task ID: task-1");
+      expect(call?.prompt).toContain("Issue ID: issue-9");
+      expect(call?.prompt).toContain("Wake reason: approval-needed");
+      expect(call?.prompt).toMatch(/Current time: .+ UTC/);
+    });
+  });
+
   it("uses agentId for workspace, session key, and store paths", async () => {
     await withTempHome(async (home) => {
       const deps = makeDeps();

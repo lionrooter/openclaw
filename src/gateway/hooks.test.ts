@@ -8,6 +8,7 @@ import {
   extractHookToken,
   isHookAgentAllowed,
   normalizeHookDispatchSessionKey,
+  normalizeHookAgentContext,
   resolveHookSessionKey,
   resolveHookTargetAgentId,
   normalizeAgentPayload,
@@ -155,6 +156,46 @@ describe("gateway hooks helpers", () => {
     expect(noAgent.ok).toBe(true);
     if (noAgent.ok) {
       expect(noAgent.value.agentId).toBeUndefined();
+    }
+  });
+
+  test("normalizeHookAgentContext keeps known fields and drops invalid values", () => {
+    expect(
+      normalizeHookAgentContext({
+        source: "paperclip",
+        runId: "run-1",
+        issueId: "issue-1",
+        issueIds: ["a", "  ", 4],
+        extra: { "repo:\nname": "lionroot-openclaw", empty: " ", bad: 1 },
+        ignored: "nope",
+      }),
+    ).toEqual({
+      source: "paperclip",
+      runId: "run-1",
+      issueId: "issue-1",
+      issueIds: ["a"],
+      extra: { "repo name": "lionroot-openclaw" },
+    });
+    expect(normalizeHookAgentContext({ nope: true })).toBeUndefined();
+    expect(normalizeHookAgentContext({})).toBeUndefined();
+  });
+
+  test("normalizeAgentPayload preserves structured context", () => {
+    const ok = normalizeAgentPayload({
+      message: "hello",
+      context: {
+        source: "paperclip",
+        taskId: "task-1",
+        issueIds: ["issue-a", "issue-b"],
+      },
+    });
+    expect(ok.ok).toBe(true);
+    if (ok.ok) {
+      expect(ok.value.context).toEqual({
+        source: "paperclip",
+        taskId: "task-1",
+        issueIds: ["issue-a", "issue-b"],
+      });
     }
   });
 
