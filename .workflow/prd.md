@@ -1,37 +1,36 @@
-# PRD — Large Text Attachment Reading + Upstream Sync
+# PRD — QMD ABI Guard + Main Heartbeat Session Reset
 
 **Status:** Approved
-**Date:** 2026-03-08
-**Provenance:** See `.workflow/inputs/original-request.md`.
+**Date:** 2026-03-09
+**Provenance:** Approved by Bryan in chat after live verification showed (1) the gateway can recover from BlockRun failures on 2026.3.3, (2) QMD native-module ABI mismatches can recur after Node upgrades, and (3) the `main` heartbeat session is too contaminated to be a trustworthy validation surface without an explicit reset.
 
 ## Summary
 
-Lionroot’s OpenClaw deployment should correctly read large pasted posts that arrive as `.txt` attachments instead of only reporting the filename. This task also now includes executing a real upstream sync in an isolated worktree so newer OpenClaw features can be integrated without disturbing the dirty primary checkout.
+Make gateway startup degrade cleanly when QMD fails due to a native-module ABI mismatch instead of repeatedly logging noisy startup/update errors, and rotate the `main` session through the supported session-reset path so heartbeat behavior can be validated on a clean session.
 
 ## User Stories
 
-- As Bryan, when I paste a long post that becomes a `.txt` attachment, I want OpenClaw to read the contents instead of saying it cannot open the file.
-- As an operator, I want large text attachments to go through the same safe extraction pipeline as other readable documents.
-- As a maintainer, I want the upstream sync executed in an isolated worktree instead of as a blind merge into the dirty primary checkout.
+- As Bryan, when the gateway runtime changes Node ABI, I want memory search to disable itself cleanly instead of spamming logs or partially arming QMD.
+- As an operator, when QMD is unavailable because of a native build mismatch, I want the gateway to continue booting with a clear warning and no repeated background failures.
+- As a maintainer, when I validate heartbeat behavior on `main`, I want a clean session reset using supported APIs rather than stale transcript state.
 
 ## Acceptance Criteria
 
 - [x] Task-specific workflow docs exist and are approved.
-- [x] Large text attachments received through Lionroot intake paths are made available to the model for reading.
-- [x] Existing small inline text attachment behavior remains sane and readable.
-- [x] Routing/classification paths that need attachment context do better than MIME-only summaries for text attachments.
-- [x] Focused regression tests cover the large-text attachment path.
-- [ ] Upstream sync is executed in an isolated worktree with conflicts resolved or clearly documented.
-- [ ] Verification shows the synced worktree still passes focused regression coverage for the Lionroot-local areas touched by the merge.
+- [ ] `src/memory/qmd-manager.ts` detects native-module ABI mismatch failures during QMD initialization and degrades cleanly.
+- [ ] QMD init aborts before recurring update loops are armed when the failure is an ABI mismatch.
+- [ ] A focused test covers the ABI-mismatch guard behavior.
+- [ ] The `main` session is reset through the supported session-reset path, not by manual store corruption.
+- [ ] A post-reset heartbeat soak on `main` yields a clean result that reflects the current heartbeat contract rather than stale session contamination.
 
 ## Out of Scope
 
-- Blindly merging or rebasing 927 upstream commits into the current dirty primary worktree.
-- Reworking unrelated attachment systems that already reach the shared extraction pipeline correctly.
-- General product cleanup unrelated to text attachment ingestion or sync planning.
+- Reworking QMD sync semantics beyond the ABI-mismatch guard.
+- Rewriting the heartbeat runner.
+- Bulk-resetting every agent session.
 
 ## Technical Notes
 
-- Core reusable extractor already exists in `src/media-understanding/apply.ts`.
-- The large-text fix lands in Lionroot-local intake paths such as `extensions/zulip/src/zulip/monitor.ts` and `src/lionroot/*`.
-- Upstream sync must happen in a dedicated worktree/branch created from current `main`, then merged with `upstream/main` there.
+- The live runtime already recovered after a manual rebuild of `better-sqlite3`; the source fix should prevent future upgrades from degrading badly before an operator rebuilds native modules.
+- The clean operational reset path is the gateway `sessions.reset` handler.
+- The post-reset heartbeat check should be bounded and avoid unnecessary channel spam where possible.

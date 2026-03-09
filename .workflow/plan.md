@@ -1,53 +1,41 @@
-# Technical Plan — Large Text Attachment Reading + Upstream Sync
+# Technical Plan — QMD ABI Guard + Main Heartbeat Session Reset
 
 **Status:** Approved
-**Date:** 2026-03-08
+**Date:** 2026-03-09
 
 ## Architecture Summary
 
-- Zulip upload processing currently inlines only small text files and previously dropped large text files from downstream media analysis.
-- Auto-reply runs `applyMediaUnderstanding()`, which can extract readable text attachments into model-visible `<file ...>` blocks.
-- Lionroot content routing can use bounded text excerpts from readable attachments during classification.
-- Upstream sync must be executed in an isolated worktree because local `main` is both heavily divergent from `upstream/main` and dirty.
+- Gateway memory startup goes through `src/gateway/server-startup-memory.ts` into `src/memory/qmd-manager.ts`.
+- `QmdMemoryManager.create()` is the right choke point for detecting initialization failures that should degrade to `null` and let the gateway continue without QMD.
+- `main` session lifecycle is managed by the gateway `sessions.reset` handler in `src/gateway/server-methods/sessions.ts`, which resets the session ID, archives transcripts, and cleans runtime state.
 
 ## Implementation Phases
 
 1. **Workflow + provenance**
-   - Maintain task-specific workflow docs.
-2. **Large text attachment fix**
-   - Cache oversized Zulip text uploads for model analysis.
-   - Pass readable attachment text into Lionroot content classification.
-   - Add focused regression tests.
-3. **Upstream sync execution**
-   - Create a dedicated worktree/branch from current `main`.
-   - Merge `upstream/main` there.
-   - Resolve conflicts, prioritizing Lionroot-local surfaces under `extensions/zulip/*`, `src/lionroot/*`, and related `src/imessage/*` hooks.
-4. **Verification**
-   - Run focused regression coverage in the sync worktree.
-   - Document remaining risks and follow-ups.
+   - Replace stale task docs with this approved scope.
+2. **QMD ABI guard**
+   - Add a narrow detector for native-module ABI mismatch text in QMD initialization failures.
+   - In `QmdMemoryManager.create()`, catch that failure class, log a clear degrade warning, close any partially initialized manager state, and return `null`.
+   - Avoid arming periodic update loops after this failure.
+3. **Verification**
+   - Add a focused unit test covering ABI-mismatch degradation.
+   - Run focused QMD and startup-memory tests.
+4. **Operational reset + soak**
+   - Reset `main` through the supported gateway session-reset path.
+   - Trigger a bounded heartbeat/system event check and inspect the resulting session/output for clean behavior.
 
-## Files Already Changed
+## Files to Modify
 
-- `extensions/zulip/src/zulip/monitor.ts`
-- `extensions/zulip/src/zulip/monitor.test.ts`
-- `src/lionroot/content-intake.ts`
-- `src/lionroot/content-intake.test.ts`
-- `src/lionroot/routing/content-route.ts`
-- `src/lionroot/routing/content-route.test.ts`
-
-## Upstream Sync Hotspots
-
-- `extensions/zulip/*`
-- `src/lionroot/*`
-- selected `src/imessage/*` files
+- `src/memory/qmd-manager.ts`
+- `src/memory/qmd-manager.test.ts`
+- workflow docs only as task gate
 
 ## Testing Strategy
 
-- Run targeted Vitest coverage for Zulip upload handling.
-- Run targeted Vitest coverage for Lionroot content routing/classification.
-- After merge resolution, rerun focused coverage on touched Lionroot-local areas before broader validation.
+- Run focused Vitest coverage for `qmd-manager` and nearby startup-memory tests.
+- After code validation, use the live gateway session-reset path and inspect `system heartbeat last` plus the new `main` session transcript.
 
 ## Rollback Plan
 
-- Keep the txt-attachment fix committed separately from the sync worktree effort.
-- If the merge becomes unstable, discard the isolated worktree/branch without touching the primary checkout.
+- Revert the QMD guard if it suppresses legitimate non-ABI initialization failures.
+- Use the archived transcript from `sessions.reset` if the operational reset needs to be inspected or reversed manually.

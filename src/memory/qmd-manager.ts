@@ -48,8 +48,29 @@ const QMD_EMBED_BACKOFF_BASE_MS = 60_000;
 const QMD_EMBED_BACKOFF_MAX_MS = 60 * 60 * 1000;
 const HAN_SCRIPT_RE = /[\u3400-\u9fff]/u;
 const QMD_BM25_HAN_KEYWORD_LIMIT = 12;
+const QMD_ABI_MISMATCH_PATTERNS = [
+  /compiled against a different Node\.js version/i,
+  /NODE_MODULE_VERSION\s+[0-9]+/i,
+  /better-sqlite3/i,
+  /ERR_DLOPEN_FAILED/i,
+] as const;
 
 let qmdEmbedQueueTail: Promise<void> = Promise.resolve();
+
+function isQmdAbiMismatchError(err: unknown): boolean {
+  const raw = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
+  const message = raw.trim();
+  if (!message) {
+    return false;
+  }
+  const matches = QMD_ABI_MISMATCH_PATTERNS.map((pattern) => pattern.test(message));
+  const [hasDifferentNodeVersion, hasNodeModuleVersion, hasBetterSqlite, hasDlOpenFailure] =
+    matches;
+  if (hasNodeModuleVersion || hasDifferentNodeVersion) {
+    return hasBetterSqlite || hasDlOpenFailure;
+  }
+  return false;
+}
 
 function resolveWindowsCommandShim(command: string): string {
   if (process.platform !== "win32") {
@@ -172,8 +193,30 @@ export class QmdMemoryManager implements MemorySearchManager {
       return null;
     }
     const manager = new QmdMemoryManager({ cfg: params.cfg, agentId: params.agentId, resolved });
-    await manager.initialize(params.mode ?? "full");
-    return manager;
+    try {
+      const mode = params.mode ?? "full";
+      await manager.initialize(mode);
+      if (mode === "full" && manager.qmd.update.onBoot && !manager.qmd.update.waitForBootSync) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+      if (manager.closed) {
+        return null;
+      }
+      return manager;
+    } catch (err) {
+      if (!isQmdAbiMismatchError(err)) {
+        await manager.close().catch(() => undefined);
+        throw err;
+      }
+      if (!manager.abiMismatchDisabled) {
+        const message = err instanceof Error ? err.message : String(err);
+        log.warn(
+          `qmd native module ABI mismatch detected for agent "${params.agentId}"; disabling qmd memory until native modules are rebuilt: ${message}`,
+        );
+      }
+      await manager.close().catch(() => undefined);
+      return null;
+    }
   }
 
   private readonly cfg: OpenClawConfig;
@@ -215,6 +258,7 @@ export class QmdMemoryManager implements MemorySearchManager {
   private embedBackoffUntil: number | null = null;
   private embedFailureCount = 0;
   private attemptedNullByteCollectionRepair = false;
+  private abiMismatchDisabled = false;
 
   private constructor(params: {
     cfg: OpenClawConfig;
@@ -295,18 +339,24 @@ export class QmdMemoryManager implements MemorySearchManager {
       const bootRun = this.runUpdate("boot", true);
       if (this.qmd.update.waitForBootSync) {
         await bootRun.catch((err) => {
-          log.warn(`qmd boot update failed: ${String(err)}`);
+          if (!this.disableForAbiMismatch(err)) {
+            log.warn(`qmd boot update failed: ${String(err)}`);
+          }
         });
       } else {
         void bootRun.catch((err) => {
-          log.warn(`qmd boot update failed: ${String(err)}`);
+          if (!this.disableForAbiMismatch(err)) {
+            log.warn(`qmd boot update failed: ${String(err)}`);
+          }
         });
       }
     }
     if (this.qmd.update.intervalMs > 0) {
       this.updateTimer = setInterval(() => {
         void this.runUpdate("interval").catch((err) => {
-          log.warn(`qmd update failed (${String(err)})`);
+          if (!this.disableForAbiMismatch(err)) {
+            log.warn(`qmd update failed (${String(err)})`);
+          }
         });
       }, this.qmd.update.intervalMs);
     }
@@ -880,6 +930,30 @@ export class QmdMemoryManager implements MemorySearchManager {
       this.db.close();
       this.db = null;
     }
+  }
+
+  private disableForAbiMismatch(err: unknown): boolean {
+    if (!isQmdAbiMismatchError(err)) {
+      return false;
+    }
+    if (this.updateTimer) {
+      clearInterval(this.updateTimer);
+      this.updateTimer = null;
+    }
+    this.queuedForcedRuns = 0;
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+    }
+    this.closed = true;
+    if (!this.abiMismatchDisabled) {
+      this.abiMismatchDisabled = true;
+      const message = err instanceof Error ? err.message : String(err);
+      log.warn(
+        `qmd native module ABI mismatch detected for agent "${this.agentId}"; disabling qmd memory until native modules are rebuilt: ${message}`,
+      );
+    }
+    return true;
   }
 
   private async runUpdate(

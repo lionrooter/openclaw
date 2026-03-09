@@ -79,6 +79,29 @@ describe("startGatewayMemoryBackend", () => {
     );
   });
 
+  it("surfaces ABI-mismatch startup degradation as a warning and keeps arming other agents", async () => {
+    const cfg = createQmdConfig({ list: [{ id: "main", default: true }, { id: "ops" }] });
+    const log = createGatewayLogMock();
+    getMemorySearchManagerMock
+      .mockResolvedValueOnce({
+        manager: null,
+        error:
+          "qmd native module ABI mismatch detected for agent \"main\"; disabling qmd memory until native modules are rebuilt: The module '/mock/better_sqlite3.node' was compiled against a different Node.js version using NODE_MODULE_VERSION 141.",
+      })
+      .mockResolvedValueOnce({ manager: { search: vi.fn() } });
+
+    await startGatewayMemoryBackend({ cfg, log });
+
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'qmd memory startup initialization failed for agent "main": qmd native module ABI mismatch detected',
+      ),
+    );
+    expect(log.info).toHaveBeenCalledWith(
+      'qmd memory startup initialization armed for agent "ops"',
+    );
+  });
+
   it("skips agents with memory search disabled", async () => {
     const cfg = createQmdConfig({
       defaults: { memorySearch: { enabled: true } },

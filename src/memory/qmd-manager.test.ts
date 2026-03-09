@@ -301,6 +301,103 @@ describe("QmdMemoryManager", () => {
     await manager?.close();
   });
 
+  it("disables qmd cleanly on native-module ABI mismatch during boot update", async () => {
+    cfg = {
+      ...cfg,
+      memory: {
+        backend: "qmd",
+        qmd: {
+          includeDefaultMemory: false,
+          update: {
+            interval: "5m",
+            debounceMs: 60_000,
+            onBoot: true,
+          },
+          paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
+        },
+      },
+    } as OpenClawConfig;
+
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === "update") {
+        const child = createMockChild({ autoClose: false });
+        emitAndClose(
+          child,
+          "stderr",
+          "Error: The module '/mock/better_sqlite3.node' was compiled against a different Node.js version using NODE_MODULE_VERSION 141. This version of Node.js requires NODE_MODULE_VERSION 137. code: 'ERR_DLOPEN_FAILED' better-sqlite3",
+          1,
+        );
+        return child;
+      }
+      return createMockChild();
+    });
+
+    const resolved = resolveMemoryBackendConfig({ cfg, agentId });
+    const manager = await QmdMemoryManager.create({
+      cfg,
+      agentId,
+      resolved,
+      mode: "full",
+    });
+
+    expect(manager).toBeNull();
+    const commands = spawnMock.mock.calls.map((call: unknown[]) => call[1] as string[]);
+    expect(commands[0]).toEqual(["collection", "list", "--json"]);
+    expect(commands).toContainEqual(["update"]);
+    expect(commands.filter((args) => args[0] === "update")).toHaveLength(1);
+    expect(logWarnMock).toHaveBeenCalledWith(
+      expect.stringContaining('qmd native module ABI mismatch detected for agent "main"'),
+    );
+    expect(logWarnMock).not.toHaveBeenCalledWith(expect.stringContaining("qmd boot update failed"));
+  });
+
+  it("returns null when waitForBootSync hits a native-module ABI mismatch", async () => {
+    cfg = {
+      ...cfg,
+      memory: {
+        backend: "qmd",
+        qmd: {
+          includeDefaultMemory: false,
+          update: {
+            interval: "5m",
+            debounceMs: 60_000,
+            onBoot: true,
+            waitForBootSync: true,
+          },
+          paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
+        },
+      },
+    } as OpenClawConfig;
+
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === "update") {
+        const child = createMockChild({ autoClose: false });
+        emitAndClose(
+          child,
+          "stderr",
+          "Error: The module '/mock/better_sqlite3.node' was compiled against a different Node.js version using NODE_MODULE_VERSION 141. This version of Node.js requires NODE_MODULE_VERSION 137. code: 'ERR_DLOPEN_FAILED' better-sqlite3",
+          1,
+        );
+        return child;
+      }
+      return createMockChild();
+    });
+
+    const resolved = resolveMemoryBackendConfig({ cfg, agentId });
+    const manager = await QmdMemoryManager.create({
+      cfg,
+      agentId,
+      resolved,
+      mode: "full",
+    });
+
+    expect(manager).toBeNull();
+    expect(logWarnMock).toHaveBeenCalledWith(
+      expect.stringContaining('qmd native module ABI mismatch detected for agent "main"'),
+    );
+    expect(logWarnMock).not.toHaveBeenCalledWith(expect.stringContaining("qmd boot update failed"));
+  });
+
   it("rebinds sessions collection when existing collection path targets another agent", async () => {
     const devAgentId = "dev";
     const devWorkspaceDir = path.join(tmpRoot, "workspace-dev");
