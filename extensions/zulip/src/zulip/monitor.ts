@@ -336,6 +336,31 @@ export async function processZulipUploads(
   };
 }
 
+export function buildZulipAgentBody(params: {
+  cleanText: string;
+  strippedContent: string;
+  attachmentInfo: string;
+  botMentionRegex: RegExp;
+  messageId: number;
+}): {
+  cleanStripped: string;
+  textWithAttachments: string;
+  bodyForAgent: string;
+} {
+  const cleanStripped = params.strippedContent
+    .replace(params.botMentionRegex, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const textWithAttachments = params.attachmentInfo
+    ? `${cleanStripped}${params.attachmentInfo}`
+    : params.cleanText;
+  return {
+    cleanStripped,
+    textWithAttachments,
+    bodyForAgent: `${textWithAttachments}\n[zulip message id: ${params.messageId}]`,
+  };
+}
+
 export type MonitorZulipOpts = {
   botEmail?: string;
   botApiKey?: string;
@@ -2183,9 +2208,13 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
         );
       },
     );
-    // Apply the same bot-mention stripping to the stripped content (upload URLs removed)
-    const cleanStripped = strippedContent.replace(botMentionRegex, "").replace(/\s+/g, " ").trim();
-    const textWithAttachments = attachmentInfo ? `${cleanStripped}${attachmentInfo}` : cleanText;
+    const { textWithAttachments, bodyForAgent } = buildZulipAgentBody({
+      cleanText,
+      strippedContent,
+      attachmentInfo,
+      botMentionRegex,
+      messageId: msg.id,
+    });
 
     // Dedicated xcase topics behave like real threads: any message is treated as a follow-up turn.
     if (kind !== "dm" && sName && isDedicatedXCaseTopic && xcaseConfig?.enabled) {
@@ -2373,7 +2402,7 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
     });
 
     const to = buildReplyTo(msg);
-    const textWithId = `${textWithAttachments}\n[zulip message id: ${msg.id}]`;
+    const textWithId = bodyForAgent;
     const topicInitialHistoryLimit = account.config.topic?.initialHistoryLimit ?? 20;
     const topicSessionPreviousTimestamp =
       kind !== "dm" && sName
@@ -2424,6 +2453,7 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
 
     const ctxPayload = core.channel.reply.finalizeInboundContext({
       Body: combinedBody,
+      BodyForAgent: bodyForAgent,
       RawBody: cleanText,
       CommandBody: cleanText,
       From: kind === "dm" ? `zulip:${senderId}` : `zulip:stream:${sName}:topic:${topic}`,

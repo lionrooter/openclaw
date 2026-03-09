@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { finalizeInboundContext } from "../../../../src/auto-reply/reply/inbound-context.js";
 import { fetchZulipMessages, type ZulipClient, type ZulipMessage } from "./client.js";
 import {
+  buildZulipAgentBody,
   formatZulipTopicHistoryBody,
   processZulipUploads,
   resolveZulipTopicContext,
@@ -74,6 +76,40 @@ describe("formatZulipTopicHistoryBody", () => {
     expect(formatted).toContain("Botty (assistant)");
     expect(formatted).toContain("[zulip message id: 10]");
     expect(formatted).toContain("[zulip message id: 11]");
+  });
+});
+
+describe("buildZulipAgentBody", () => {
+  it("keeps command text clean while giving the agent attachment-aware text", () => {
+    const result = buildZulipAgentBody({
+      cleanText: "what about this info? [attached: PastedText.txt]",
+      strippedContent: "@**Cody** what about this info? [attached: PastedText.txt]",
+      attachmentInfo: '\n[Attached files]\n📎 File "PastedText.txt":\n```\nSecret phrase\n```',
+      botMentionRegex: /@\*\*Cody\*\*/gi,
+      messageId: 3538,
+    });
+
+    expect(result.cleanStripped).toBe("what about this info? [attached: PastedText.txt]");
+    expect(result.textWithAttachments).toContain("[Attached files]");
+    expect(result.bodyForAgent).toContain('📎 File "PastedText.txt"');
+    expect(result.bodyForAgent).toContain("[zulip message id: 3538]");
+    expect(result.bodyForAgent).not.toContain("@**Cody**");
+
+    const finalized = finalizeInboundContext({
+      Body: "Envelope body",
+      BodyForAgent: result.bodyForAgent,
+      RawBody: result.cleanStripped,
+      CommandBody: result.cleanStripped,
+      From: "zulip:stream:04💻 coding-loop:topic:test",
+      To: "zulip:stream:04💻 coding-loop:topic:test",
+      SessionKey: "agent:cody:zulip:test",
+      ChatType: "group",
+    });
+
+    expect(finalized.BodyForAgent).toContain('📎 File "PastedText.txt"');
+    expect(finalized.RawBody).toBe("what about this info? [attached: PastedText.txt]");
+    expect(finalized.CommandBody).toBe("what about this info? [attached: PastedText.txt]");
+    expect(finalized.BodyForCommands).toBe("what about this info? [attached: PastedText.txt]");
   });
 });
 
