@@ -1,36 +1,37 @@
-# PRD — QMD ABI Guard + Main Heartbeat Session Reset
+# PRD — Zulip Inline Attachment Prompting Fix
 
 **Status:** Approved
 **Date:** 2026-03-09
-**Provenance:** Approved by Bryan in chat after live verification showed (1) the gateway can recover from BlockRun failures on 2026.3.3, (2) QMD native-module ABI mismatches can recur after Node upgrades, and (3) the `main` heartbeat session is too contaminated to be a trustworthy validation surface without an explicit reset.
+**Provenance:** Approved by Bryan in chat on 2026-03-09 after live verification showed the Zulip intake path now inlines upload text into Cody’s session input, but Cody still tries a redundant local `read` of the attachment filename instead of answering from the already-included text.
 
 ## Summary
 
-Make gateway startup degrade cleanly when QMD fails due to a native-module ABI mismatch instead of repeatedly logging noisy startup/update errors, and rotate the `main` session through the supported session-reset path so heartbeat behavior can be validated on a clean session.
+Adjust the Zulip attachment prompt formatting so agents treat small readable uploads as already-present prompt text, and expose the real cached filesystem path for large readable uploads that are saved for later tool access.
 
 ## User Stories
 
-- As Bryan, when the gateway runtime changes Node ABI, I want memory search to disable itself cleanly instead of spamming logs or partially arming QMD.
-- As an operator, when QMD is unavailable because of a native build mismatch, I want the gateway to continue booting with a clear warning and no repeated background failures.
-- As a maintainer, when I validate heartbeat behavior on `main`, I want a clean session reset using supported APIs rather than stale transcript state.
+- As Bryan, when I paste a small text upload into Zulip, I want Cody to answer directly from the inline text.
+- As an operator, when attachment text is already present in the agent prompt, I do not want the model to waste a turn trying to `read` a filename that is not in its cwd.
+- As a maintainer, I want this fix to stay narrow to Zulip readable text uploads without changing binary attachment handling.
 
 ## Acceptance Criteria
 
 - [x] Task-specific workflow docs exist and are approved.
-- [ ] `src/memory/qmd-manager.ts` detects native-module ABI mismatch failures during QMD initialization and degrades cleanly.
-- [ ] QMD init aborts before recurring update loops are armed when the failure is an ABI mismatch.
-- [ ] A focused test covers the ABI-mismatch guard behavior.
-- [ ] The `main` session is reset through the supported session-reset path, not by manual store corruption.
-- [ ] A post-reset heartbeat soak on `main` yields a clean result that reflects the current heartbeat contract rather than stale session contamination.
+- [ ] Inline text uploads in Zulip are labeled as already included, not just generically attached.
+- [ ] The inline-text body wording discourages redundant read-tool calls.
+- [ ] Large cached text uploads include the real saved filesystem path in the prompt note.
+- [ ] Binary attachment behavior remains unchanged.
+- [ ] Focused Zulip tests cover the new wording.
+- [ ] A fresh live Zulip upload test shows Cody answering from the inline marker rather than trying to open the filename.
 
 ## Out of Scope
 
-- Reworking QMD sync semantics beyond the ABI-mismatch guard.
-- Rewriting the heartbeat runner.
-- Bulk-resetting every agent session.
+- General tool-selection training for all agents.
+- Reworking non-Zulip attachment behavior.
+- Large architectural changes to prompt assembly.
 
 ## Technical Notes
 
-- The live runtime already recovered after a manual rebuild of `better-sqlite3`; the source fix should prevent future upgrades from degrading badly before an operator rebuilds native modules.
-- The clean operational reset path is the gateway `sessions.reset` handler.
-- The post-reset heartbeat check should be bounded and avoid unnecessary channel spam where possible.
+- The previous `BodyForAgent` fix is working: the session transcript now includes the inline file contents and marker.
+- The remaining issue is prompt semantics, not attachment ingestion.
+- The safest fix is to change the placeholder and attachment heading/line wording specifically for inlined text attachments.

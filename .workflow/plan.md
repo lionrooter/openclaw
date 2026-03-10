@@ -1,41 +1,41 @@
-# Technical Plan — QMD ABI Guard + Main Heartbeat Session Reset
+# Technical Plan — Zulip Inline Attachment Prompting Fix
 
 **Status:** Approved
 **Date:** 2026-03-09
 
 ## Architecture Summary
 
-- Gateway memory startup goes through `src/gateway/server-startup-memory.ts` into `src/memory/qmd-manager.ts`.
-- `QmdMemoryManager.create()` is the right choke point for detecting initialization failures that should degrade to `null` and let the gateway continue without QMD.
-- `main` session lifecycle is managed by the gateway `sessions.reset` handler in `src/gateway/server-methods/sessions.ts`, which resets the session ID, archives transcripts, and cleans runtime state.
+- `extensions/zulip/src/zulip/monitor.ts` builds Zulip attachment prompt text in `processZulipUploads()` and `buildZulipAgentBody()`.
+- The live session transcript proves the inline attachment text already reaches `BodyForAgent`.
+- The bad behavior comes from how the prompt still presents the file as an attached artifact, which encourages a redundant `read` call on the bare filename.
 
 ## Implementation Phases
 
-1. **Workflow + provenance**
-   - Replace stale task docs with this approved scope.
-2. **QMD ABI guard**
-   - Add a narrow detector for native-module ABI mismatch text in QMD initialization failures.
-   - In `QmdMemoryManager.create()`, catch that failure class, log a clear degrade warning, close any partially initialized manager state, and return `null`.
-   - Avoid arming periodic update loops after this failure.
-3. **Verification**
-   - Add a focused unit test covering ABI-mismatch degradation.
-   - Run focused QMD and startup-memory tests.
-4. **Operational reset + soak**
-   - Reset `main` through the supported gateway session-reset path.
-   - Trigger a bounded heartbeat/system event check and inspect the resulting session/output for clean behavior.
+1. **Workflow + scope**
+   - Replace stale workflow docs with this approved task scope.
+2. **Prompt wording fix**
+   - In the inline-text branch of `processZulipUploads()`, replace the generic `[attached: ...]` placeholder with wording that says the file contents are already included below.
+   - Adjust the inline attachment section wording to explicitly say no tool read is needed unless a real path is provided.
+   - In the large-text cached branch, include the saved filesystem path in the prompt note so the agent knows where the cached file actually lives.
+   - Leave binary-file handling unchanged.
+3. **Focused tests**
+   - Update Zulip monitor tests to assert the new inline-text wording.
+4. **Verification**
+   - Run focused Zulip tests.
+   - Send a fresh live Zulip upload verification and inspect Cody’s reply/session behavior.
 
 ## Files to Modify
 
-- `src/memory/qmd-manager.ts`
-- `src/memory/qmd-manager.test.ts`
+- `extensions/zulip/src/zulip/monitor.ts`
+- `extensions/zulip/src/zulip/monitor.test.ts`
 - workflow docs only as task gate
 
 ## Testing Strategy
 
-- Run focused Vitest coverage for `qmd-manager` and nearby startup-memory tests.
-- After code validation, use the live gateway session-reset path and inspect `system heartbeat last` plus the new `main` session transcript.
+- Run focused Vitest on Zulip monitor/url-bridge tests.
+- Re-run the live marker test in Zulip and inspect both Cody’s visible reply and the underlying session transcript.
 
 ## Rollback Plan
 
-- Revert the QMD guard if it suppresses legitimate non-ABI initialization failures.
-- Use the archived transcript from `sessions.reset` if the operational reset needs to be inspected or reversed manually.
+- Revert the wording change if it harms attachment clarity or causes regressions in other Zulip workflows.
+- Keep the earlier `BodyForAgent` fix regardless; it is independently correct.

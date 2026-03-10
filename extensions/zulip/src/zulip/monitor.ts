@@ -256,7 +256,9 @@ export async function processZulipUploads(
         if (downloaded.length <= MAX_INLINE_TEXT_BYTES) {
           try {
             const text = downloaded.toString("utf-8");
-            attachmentLines.push(`📎 File "${upload.name}":\n\`\`\`\n${text}\n\`\`\``);
+            attachmentLines.push(
+              `📎 File "${upload.name}" (contents already included below; do not use tools to open it unless a filesystem path is explicitly provided):\n\`\`\`\n${text}\n\`\`\``,
+            );
           } catch {
             attachmentLines.push(`📎 File "${upload.name}": ${downloaded.length} bytes`);
           }
@@ -272,7 +274,7 @@ export async function processZulipUploads(
               mediaTypes.push(saved.contentType);
             }
             attachmentLines.push(
-              `📎 File "${upload.name}" (${Math.round(downloaded.length / 1024)} KB — too large to inline; cached for model analysis)`,
+              `📎 File "${upload.name}" (${Math.round(downloaded.length / 1024)} KB — too large to inline; cached for model analysis at path: ${saved.path})`,
             );
           } else {
             attachmentLines.push(
@@ -302,7 +304,9 @@ export async function processZulipUploads(
       strippedContent = replaceUploadReferences(
         strippedContent,
         upload,
-        `[attached: ${upload.name}]`,
+        isTextFile(upload.name) && downloaded.length <= MAX_INLINE_TEXT_BYTES
+          ? `[inline file contents already included below: ${upload.name}]`
+          : `[attached: ${upload.name}]`,
       );
     } else {
       if (download.tooLarge) {
@@ -329,7 +333,9 @@ export async function processZulipUploads(
 
   return {
     attachmentInfo:
-      attachmentLines.length > 0 ? `\n[Attached files]\n${attachmentLines.join("\n")}` : "",
+      attachmentLines.length > 0
+        ? `\n[Attached files; inline text contents are already included here when available]\n${attachmentLines.join("\n")}`
+        : "",
     strippedContent,
     mediaPaths,
     mediaTypes,

@@ -82,15 +82,22 @@ describe("formatZulipTopicHistoryBody", () => {
 describe("buildZulipAgentBody", () => {
   it("keeps command text clean while giving the agent attachment-aware text", () => {
     const result = buildZulipAgentBody({
-      cleanText: "what about this info? [attached: PastedText.txt]",
-      strippedContent: "@**Cody** what about this info? [attached: PastedText.txt]",
-      attachmentInfo: '\n[Attached files]\n📎 File "PastedText.txt":\n```\nSecret phrase\n```',
+      cleanText:
+        "what about this info? [inline file contents already included below: PastedText.txt]",
+      strippedContent:
+        "@**Cody** what about this info? [inline file contents already included below: PastedText.txt]",
+      attachmentInfo:
+        '\n[Attached files; inline text contents are already included here when available]\n📎 File "PastedText.txt" (contents already included below; do not use tools to open it unless a filesystem path is explicitly provided):\n```\nSecret phrase\n```',
       botMentionRegex: /@\*\*Cody\*\*/gi,
       messageId: 3538,
     });
 
-    expect(result.cleanStripped).toBe("what about this info? [attached: PastedText.txt]");
-    expect(result.textWithAttachments).toContain("[Attached files]");
+    expect(result.cleanStripped).toBe(
+      "what about this info? [inline file contents already included below: PastedText.txt]",
+    );
+    expect(result.textWithAttachments).toContain(
+      "[Attached files; inline text contents are already included here when available]",
+    );
     expect(result.bodyForAgent).toContain('📎 File "PastedText.txt"');
     expect(result.bodyForAgent).toContain("[zulip message id: 3538]");
     expect(result.bodyForAgent).not.toContain("@**Cody**");
@@ -107,9 +114,15 @@ describe("buildZulipAgentBody", () => {
     });
 
     expect(finalized.BodyForAgent).toContain('📎 File "PastedText.txt"');
-    expect(finalized.RawBody).toBe("what about this info? [attached: PastedText.txt]");
-    expect(finalized.CommandBody).toBe("what about this info? [attached: PastedText.txt]");
-    expect(finalized.BodyForCommands).toBe("what about this info? [attached: PastedText.txt]");
+    expect(finalized.RawBody).toBe(
+      "what about this info? [inline file contents already included below: PastedText.txt]",
+    );
+    expect(finalized.CommandBody).toBe(
+      "what about this info? [inline file contents already included below: PastedText.txt]",
+    );
+    expect(finalized.BodyForCommands).toBe(
+      "what about this info? [inline file contents already included below: PastedText.txt]",
+    );
   });
 });
 
@@ -179,8 +192,12 @@ describe("processZulipUploads", () => {
 
     expect(result.mediaPaths).toEqual([]);
     expect(result.mediaTypes).toEqual([]);
-    expect(result.strippedContent).toContain("[attached: notes.txt]");
-    expect(result.attachmentInfo).toContain('📎 File "notes.txt":\n```\nhello\nworld\n```');
+    expect(result.strippedContent).toContain(
+      "[inline file contents already included below: notes.txt]",
+    );
+    expect(result.attachmentInfo).toContain(
+      '📎 File "notes.txt" (contents already included below; do not use tools to open it unless a filesystem path is explicitly provided):\n```\nhello\nworld\n```',
+    );
     expect(saveMedia).not.toHaveBeenCalled();
   });
 
@@ -212,7 +229,9 @@ describe("processZulipUploads", () => {
     expect(result.mediaPaths).toEqual([saved.path]);
     expect(result.mediaTypes).toEqual([saved.contentType]);
     expect(result.strippedContent).toContain("[attached: PastedText.txt]");
-    expect(result.attachmentInfo).toContain("too large to inline; cached for model analysis");
+    expect(result.attachmentInfo).toContain(
+      "too large to inline; cached for model analysis at path: /tmp/media/PastedText.txt",
+    );
     expect(saveMedia).toHaveBeenCalledTimes(1);
   });
 
