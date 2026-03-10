@@ -65,12 +65,16 @@ function shouldSuppressPermissionErrorNotice(permissionError: PermissionError): 
 }
 
 function extractPermissionError(err: unknown): PermissionError | null {
-  if (!err || typeof err !== "object") return null;
+  if (!err || typeof err !== "object") {
+    return null;
+  }
 
   // Axios error structure: err.response.data contains the Feishu error
   const axiosErr = err as { response?: { data?: unknown } };
   const data = axiosErr.response?.data;
-  if (!data || typeof data !== "object") return null;
+  if (!data || typeof data !== "object") {
+    return null;
+  }
 
   const feishuErr = data as {
     code?: number;
@@ -79,7 +83,9 @@ function extractPermissionError(err: unknown): PermissionError | null {
   };
 
   // Feishu permission error code: 99991672
-  if (feishuErr.code !== 99991672) return null;
+  if (feishuErr.code !== 99991672) {
+    return null;
+  }
 
   // Extract the grant URL from the error message (contains the direct link)
   const msg = feishuErr.msg ?? "";
@@ -122,24 +128,39 @@ function resolveSenderLookupIdType(senderId: string): "open_id" | "user_id" | "u
 async function resolveFeishuSenderName(params: {
   account: ResolvedFeishuAccount;
   senderId: string;
-  log: (...args: any[]) => void;
+  log: (...args: unknown[]) => void;
 }): Promise<SenderNameResult> {
   const { account, senderId, log } = params;
-  if (!account.configured) return {};
+  if (!account.configured) {
+    return {};
+  }
 
   const normalizedSenderId = senderId.trim();
-  if (!normalizedSenderId) return {};
+  if (!normalizedSenderId) {
+    return {};
+  }
 
   const cached = senderNameCache.get(normalizedSenderId);
   const now = Date.now();
-  if (cached && cached.expireAt > now) return { name: cached.name };
+  if (cached && cached.expireAt > now) {
+    return { name: cached.name };
+  }
 
   try {
     const client = createFeishuClient(account);
     const userIdType = resolveSenderLookupIdType(normalizedSenderId);
 
     // contact/v3/users/:user_id?user_id_type=<open_id|user_id|union_id>
-    const res: any = await client.contact.user.get({
+    const res: {
+      data?: {
+        user?: {
+          name?: string;
+          display_name?: string;
+          nickname?: string;
+          en_name?: string;
+        };
+      };
+    } = await client.contact.user.get({
       path: { user_id: normalizedSenderId },
       params: { user_id_type: userIdType },
     });
@@ -354,7 +375,7 @@ function parseMessageContent(content: string, messageType: string): string {
  */
 function parseMergeForwardContent(params: {
   content: string;
-  log?: (...args: any[]) => void;
+  log?: (...args: unknown[]) => void;
 }): string {
   const { content, log } = params;
   const maxMessages = 50;
@@ -452,10 +473,14 @@ function formatSubMessageContent(content: string, contentType: string): string {
 }
 
 function checkBotMentioned(event: FeishuMessageEvent, botOpenId?: string): boolean {
-  if (!botOpenId) return false;
+  if (!botOpenId) {
+    return false;
+  }
   // Check for @all (@_all in Feishu) — treat as mentioning every bot
   const rawContent = event.message.content ?? "";
-  if (rawContent.includes("@_all")) return true;
+  if (rawContent.includes("@_all")) {
+    return true;
+  }
   const mentions = event.message.mentions ?? [];
   if (mentions.length > 0) {
     // Rely on Feishu mention IDs; display names can vary by alias/context.
@@ -474,7 +499,9 @@ function normalizeMentions(
   mentions?: FeishuMessageEvent["message"]["mentions"],
   botStripId?: string,
 ): string {
-  if (!mentions || mentions.length === 0) return text;
+  if (!mentions || mentions.length === 0) {
+    return text;
+  }
 
   const escaped = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const escapeName = (value: string) => value.replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -744,9 +771,13 @@ async function resolveFeishuMediaList(params: {
 // Returns null if no broadcast config exists or the peer is not in the broadcast list.
 export function resolveBroadcastAgents(cfg: ClawdbotConfig, peerId: string): string[] | null {
   const broadcast = (cfg as Record<string, unknown>).broadcast;
-  if (!broadcast || typeof broadcast !== "object") return null;
+  if (!broadcast || typeof broadcast !== "object") {
+    return null;
+  }
   const agents = (broadcast as Record<string, unknown>)[peerId];
-  if (!Array.isArray(agents) || agents.length === 0) return null;
+  if (!Array.isArray(agents) || agents.length === 0) {
+    return null;
+  }
   return agents as string[];
 }
 
@@ -937,7 +968,9 @@ export async function handleFeishuMessage(params: {
       senderId: ctx.senderOpenId,
       log,
     });
-    if (senderResult.name) ctx = { ...ctx, senderName: senderResult.name };
+    if (senderResult.name) {
+      ctx = { ...ctx, senderName: senderResult.name };
+    }
 
     // Track permission error to inform agent later (with cooldown to avoid repetition)
     if (senderResult.permissionError) {
@@ -1178,7 +1211,6 @@ export async function handleFeishuMessage(params: {
 
     // Dynamic agent creation for DM users
     // When enabled, creates a unique agent instance with its own workspace for each DM user.
-    let effectiveCfg = cfg;
     if (!isGroup && route.matchedBy === "default") {
       const dynamicCfg = feishuCfg?.dynamicAgentCreation as DynamicAgentCreationConfig | undefined;
       if (dynamicCfg?.enabled) {
@@ -1191,7 +1223,6 @@ export async function handleFeishuMessage(params: {
           log: (msg) => log(msg),
         });
         if (result.created) {
-          effectiveCfg = result.updatedCfg;
           // Re-resolve route with updated config
           route = core.channel.routing.resolveAgentRoute({
             cfg: result.updatedCfg,
@@ -1372,9 +1403,10 @@ export async function handleFeishuMessage(params: {
       }
 
       // --- Broadcast dispatch: send message to all configured agents ---
-      const strategy =
-        ((cfg as Record<string, unknown>).broadcast as Record<string, unknown> | undefined)
-          ?.strategy || "parallel";
+      const rawBroadcastStrategy = (
+        (cfg as Record<string, unknown>).broadcast as Record<string, unknown> | undefined
+      )?.strategy;
+      const strategy = typeof rawBroadcastStrategy === "string" ? rawBroadcastStrategy : "parallel";
       const activeAgentId =
         ctx.mentionedBot || !requireMention ? normalizeAgentId(route.agentId) : null;
       const agentIds = (cfg.agents?.list ?? []).map((a: { id: string }) => normalizeAgentId(a.id));

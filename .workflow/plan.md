@@ -1,35 +1,42 @@
-# Technical Plan — Repo-wide Typecheck Failure Cleanup
+# Technical Plan — Repo-wide Lint Cleanup
 
 **Status:** Approved
 **Date:** 2026-03-10
-**Flow/Context Builder Output:** RepoPrompt plan identified three narrow failures: unreachable dead code in Feishu warnings, an overly narrow `remote.apiKey` type in memory search, and stale test fixtures in content intake missing `lastRoutePolicy` and updated media field names.
+**Flow/Context Builder Output:** Lint backlog profiling shows 410 remaining diagnostics after the initial pass, led by `no-explicit-any`, `curly`, `no-unsafe-optional-chaining`, `no-unused-vars`, and `no-unnecessary-type-assertion`. The first safe tranche targets mechanical fixes only.
 
 ## Architecture
 
-- `extensions/feishu/src/channel.ts` delegates warning generation to the shared allowlist/group-policy helper; it should not contain extra fallback logic after returning.
-- `src/agents/memory-search.ts` merges config that may carry `SecretInput` through to embedding provider creation, where secrets are resolved lazily.
-- `src/lionroot/content-intake.test.ts` builds synthetic route fixtures and params that must match current `ResolvedAgentRoute` and content-intake parameter shapes.
+- Lint cleanup should be done in narrow, rule-driven batches.
+- Mechanical rule families (`curly`, `no-unused-vars`) should be preferred first because they are low-risk and often auto-fixable.
+- Higher-cost categories such as `no-explicit-any` should be deferred until after easy wins reduce noise.
 
 ## Files to Modify
 
-- `extensions/feishu/src/channel.ts` — remove dead fallback code after the warning helper return.
-- `src/agents/memory-search.ts` — widen the merged remote `apiKey` type to `SecretInput`.
-- `src/lionroot/content-intake.test.ts` — update fixtures to current route and media field shapes.
+### First safe tranche
+
+- `extensions/feishu/src/bot.ts`
+- `extensions/feishu/src/outbound.ts`
+- `extensions/zalo/src/accounts.ts`
+- `extensions/zalo/src/channel.ts`
+
+### Deferred until separately cleaned
+
+- Synology Chat, Mattermost, and Feishu docx helper files touched by exploratory autofix but not yet brought clean.
 
 ## Tasks
 
-1. [ ] Remove the Feishu undefined `groupPolicy` dead code path.
-2. [ ] Align memory-search remote API key typing with config/runtime types.
-3. [ ] Update content-intake test fixtures to current route/media contracts.
-4. [ ] Run focused verification for the touched areas plus Zulip regression tests.
-5. [ ] Re-run `pnpm check` and report any remaining blockers.
+1. [x] Profile lint backlog by rule and file.
+2. [x] Fix a first mechanical tranche (`curly`, `no-unused-vars`, safe typing cleanup) in the four selected files.
+3. [ ] Commit the first clean tranche.
+4. [ ] Re-profile the backlog and select the next tranche.
 
 ## Testing Strategy
 
-- Run targeted tests for `memory-search` and `content-intake` where available.
-- Re-run the focused Zulip tests to guard the previously-completed work.
-- Re-run `pnpm check` to identify whether any blockers remain after the narrow fixes.
+- Re-run `oxlint --type-aware` on the selected tranche files.
+- Re-run formatting checks on those files.
+- Preserve previously passing targeted Zulip/typecheck tests.
 
 ## Rollback Plan
 
-- Revert these three files only; each change is isolated and does not depend on the Zulip attachment commit.
+- Revert the tranche commit if any behavior regresses.
+- Keep future lint cleanup isolated in separate commits by tranche.
