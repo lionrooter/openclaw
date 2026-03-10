@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
+import type { IMessageInboundDispatchDecision } from "../imessage/monitor/inbound-processing.js";
 import {
   clearLastForward,
   clearRecentTweetForward,
@@ -32,7 +33,7 @@ vi.mock("./routing/content-route.js", async (importOriginal) => {
   };
 });
 
-import { handleContentIntake } from "./content-intake.js";
+import { handleContentIntake, type ContentIntakeParams } from "./content-intake.js";
 
 function createConfig(): OpenClawConfig {
   return {
@@ -89,7 +90,7 @@ function createConfig(): OpenClawConfig {
   } as unknown as OpenClawConfig;
 }
 
-function createDecision() {
+function createDecision(): IMessageInboundDispatchDecision {
   return {
     kind: "dispatch",
     isGroup: false,
@@ -101,6 +102,7 @@ function createDecision() {
       accountId: "personal",
       sessionKey: "agent:liev:imessage:direct:+15551234567",
       mainSessionKey: "agent:main:main",
+      lastRoutePolicy: "session",
       matchedBy: "default",
     },
     bodyText: "",
@@ -109,10 +111,10 @@ function createDecision() {
     commandAuthorized: false,
     effectiveDmAllowFrom: [],
     effectiveGroupAllowFrom: [],
-  } as const;
+  };
 }
 
-function createParams() {
+function createParams(): ContentIntakeParams {
   const cfg = createConfig();
   const decision = createDecision();
   const sendMessage = vi.fn().mockResolvedValue(undefined);
@@ -121,6 +123,8 @@ function createParams() {
     decision: { ...decision },
     message: { sender: decision.sender, id: 42 } as never,
     bodyText: "https://github.com/openclaw/openclaw",
+    mediaPath: undefined,
+    mediaType: undefined,
     mediaPaths: [],
     mediaTypes: [],
     historyLimit: 0,

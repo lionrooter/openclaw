@@ -1,41 +1,35 @@
-# Technical Plan — Zulip Inline Attachment Prompting Fix
+# Technical Plan — Repo-wide Typecheck Failure Cleanup
 
 **Status:** Approved
-**Date:** 2026-03-09
+**Date:** 2026-03-10
+**Flow/Context Builder Output:** RepoPrompt plan identified three narrow failures: unreachable dead code in Feishu warnings, an overly narrow `remote.apiKey` type in memory search, and stale test fixtures in content intake missing `lastRoutePolicy` and updated media field names.
 
-## Architecture Summary
+## Architecture
 
-- `extensions/zulip/src/zulip/monitor.ts` builds Zulip attachment prompt text in `processZulipUploads()` and `buildZulipAgentBody()`.
-- The live session transcript proves the inline attachment text already reaches `BodyForAgent`.
-- The bad behavior comes from how the prompt still presents the file as an attached artifact, which encourages a redundant `read` call on the bare filename.
-
-## Implementation Phases
-
-1. **Workflow + scope**
-   - Replace stale workflow docs with this approved task scope.
-2. **Prompt wording fix**
-   - In the inline-text branch of `processZulipUploads()`, replace the generic `[attached: ...]` placeholder with wording that says the file contents are already included below.
-   - Adjust the inline attachment section wording to explicitly say no tool read is needed unless a real path is provided.
-   - In the large-text cached branch, include the saved filesystem path in the prompt note so the agent knows where the cached file actually lives.
-   - Leave binary-file handling unchanged.
-3. **Focused tests**
-   - Update Zulip monitor tests to assert the new inline-text wording.
-4. **Verification**
-   - Run focused Zulip tests.
-   - Send a fresh live Zulip upload verification and inspect Cody’s reply/session behavior.
+- `extensions/feishu/src/channel.ts` delegates warning generation to the shared allowlist/group-policy helper; it should not contain extra fallback logic after returning.
+- `src/agents/memory-search.ts` merges config that may carry `SecretInput` through to embedding provider creation, where secrets are resolved lazily.
+- `src/lionroot/content-intake.test.ts` builds synthetic route fixtures and params that must match current `ResolvedAgentRoute` and content-intake parameter shapes.
 
 ## Files to Modify
 
-- `extensions/zulip/src/zulip/monitor.ts`
-- `extensions/zulip/src/zulip/monitor.test.ts`
-- workflow docs only as task gate
+- `extensions/feishu/src/channel.ts` — remove dead fallback code after the warning helper return.
+- `src/agents/memory-search.ts` — widen the merged remote `apiKey` type to `SecretInput`.
+- `src/lionroot/content-intake.test.ts` — update fixtures to current route and media field shapes.
+
+## Tasks
+
+1. [ ] Remove the Feishu undefined `groupPolicy` dead code path.
+2. [ ] Align memory-search remote API key typing with config/runtime types.
+3. [ ] Update content-intake test fixtures to current route/media contracts.
+4. [ ] Run focused verification for the touched areas plus Zulip regression tests.
+5. [ ] Re-run `pnpm check` and report any remaining blockers.
 
 ## Testing Strategy
 
-- Run focused Vitest on Zulip monitor/url-bridge tests.
-- Re-run the live marker test in Zulip and inspect both Cody’s visible reply and the underlying session transcript.
+- Run targeted tests for `memory-search` and `content-intake` where available.
+- Re-run the focused Zulip tests to guard the previously-completed work.
+- Re-run `pnpm check` to identify whether any blockers remain after the narrow fixes.
 
 ## Rollback Plan
 
-- Revert the wording change if it harms attachment clarity or causes regressions in other Zulip workflows.
-- Keep the earlier `BodyForAgent` fix regardless; it is independently correct.
+- Revert these three files only; each change is isolated and does not depend on the Zulip attachment commit.
