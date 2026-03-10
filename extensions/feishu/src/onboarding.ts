@@ -37,7 +37,7 @@ function setFeishuDmPolicy(cfg: ClawdbotConfig, dmPolicy: DmPolicy): ClawdbotCon
     cfg,
     channel: "feishu",
     dmPolicy,
-  }) as ClawdbotConfig;
+  });
 }
 
 function setFeishuAllowFrom(cfg: ClawdbotConfig, allowFrom: string[]): ClawdbotConfig {
@@ -45,7 +45,7 @@ function setFeishuAllowFrom(cfg: ClawdbotConfig, allowFrom: string[]): ClawdbotC
     cfg,
     channel: "feishu",
     allowFrom,
-  }) as ClawdbotConfig;
+  });
 }
 
 async function promptFeishuAllowFrom(params: {
@@ -120,7 +120,7 @@ function setFeishuGroupPolicy(
     channel: "feishu",
     groupPolicy,
     enabled: true,
-  }) as ClawdbotConfig;
+  });
 }
 
 function setFeishuGroupAllowFrom(cfg: ClawdbotConfig, groupAllowFrom: string[]): ClawdbotConfig {
@@ -318,14 +318,14 @@ export const feishuOnboardingAdapter: ChannelOnboardingAdapter = {
 
     const currentMode =
       (next.channels?.feishu as FeishuConfig | undefined)?.connectionMode ?? "websocket";
-    const connectionMode = (await prompter.select({
+    const connectionMode = await prompter.select({
       message: "Feishu connection mode",
       options: [
         { value: "websocket", label: "WebSocket (default)" },
         { value: "webhook", label: "Webhook" },
       ],
       initialValue: currentMode,
-    })) as "websocket" | "webhook";
+    });
     next = {
       ...next,
       channels: {

@@ -20,7 +20,6 @@ import { getMattermostRuntime } from "../runtime.js";
 import {
   createMattermostClient,
   fetchMattermostChannel,
-  normalizeMattermostBaseUrl,
   sendMattermostTyping,
   type MattermostChannel,
 } from "./client.js";
@@ -359,7 +358,6 @@ async function handleSlashCommandAsync(params: {
     teamId,
     kind,
     chatType,
-    channelName,
     channelDisplay,
     roomLabel,
     commandAuthorized,
@@ -502,7 +500,9 @@ async function handleSlashCommandAsync(params: {
           );
           const chunks = core.channel.text.chunkMarkdownTextWithMode(text, textLimit, chunkMode);
           for (const chunk of chunks.length > 0 ? chunks : [text]) {
-            if (!chunk) continue;
+            if (!chunk) {
+              continue;
+            }
             await sendMessageMattermost(to, chunk, {
               accountId: account.accountId,
             });

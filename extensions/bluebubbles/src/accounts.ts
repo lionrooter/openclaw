@@ -1,4 +1,4 @@
-import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "openclaw/plugin-sdk/account-id";
+import { normalizeAccountId } from "openclaw/plugin-sdk/account-id";
 import { createAccountListHelpers, type OpenClawConfig } from "openclaw/plugin-sdk/bluebubbles";
 import { hasConfiguredSecretInput, normalizeSecretInputString } from "./secret-input.js";
 import { normalizeBlueBubblesServerUrl, type BlueBubblesAccountConfig } from "./types.js";
@@ -52,7 +52,6 @@ export function resolveBlueBubblesAccount(params: {
   const merged = mergeBlueBubblesAccountConfig(params.cfg, accountId);
   const accountEnabled = merged.enabled !== false;
   const serverUrl = normalizeSecretInputString(merged.serverUrl);
-  const password = normalizeSecretInputString(merged.password);
   const configured = Boolean(serverUrl && hasConfiguredSecretInput(merged.password));
   const baseUrl = serverUrl ? normalizeBlueBubblesServerUrl(serverUrl) : undefined;
   return {
