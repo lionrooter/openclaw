@@ -178,9 +178,15 @@ jobs:
         if: (github.event_name != 'push' || matrix.runtime != 'bun') && matrix.task == 'test' && matrix.runtime == 'node'
         run: |
           # `pnpm test` runs `scripts/test-parallel.mjs`, which spawns multiple Node processes.
-          # Default heap limits have been too low on Linux CI (V8 OOM near 4GB).
-          echo "OPENCLAW_TEST_WORKERS=2" >> "$GITHUB_ENV"
-          echo "OPENCLAW_TEST_MAX_OLD_SPACE_SIZE_MB=6144" >> "$GITHUB_ENV"
+          # Upstream runners can sustain 2 workers with a 6GB old-space budget; GitHub-hosted
+          # fork fallbacks need a smaller footprint to avoid OOM kills.
+          if [ "${{ github.repository }}" = "openclaw/openclaw" ]; then
+            echo "OPENCLAW_TEST_WORKERS=2" >> "$GITHUB_ENV"
+            echo "OPENCLAW_TEST_MAX_OLD_SPACE_SIZE_MB=6144" >> "$GITHUB_ENV"
+          else
+            echo "OPENCLAW_TEST_WORKERS=1" >> "$GITHUB_ENV"
+            echo "OPENCLAW_TEST_MAX_OLD_SPACE_SIZE_MB=4096" >> "$GITHUB_ENV"
+          fi
 
       - name: Run ${{ matrix.task }} (${{ matrix.runtime }})
         if: matrix.runtime != 'bun' || github.event_name != 'push'
