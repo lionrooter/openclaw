@@ -352,7 +352,17 @@ jobs:
           pre-commit run zizmor --files "${workflow_files[@]}"
 
       - name: Audit production dependencies
+        if: github.repository == 'openclaw/openclaw'
         run: pre-commit run --all-files pnpm-audit-prod
+
+      - name: Audit production dependencies (advisory on forks)
+        if: github.repository != 'openclaw/openclaw'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! pre-commit run --all-files pnpm-audit-prod; then
+            echo "::warning::pnpm-audit-prod failed on this fork; upstream-only enforcement remains enabled on openclaw/openclaw."
+          fi
 
   checks-windows:
     needs: [docs-scope, changed-scope]
