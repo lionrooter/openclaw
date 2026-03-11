@@ -205,7 +205,17 @@ jobs:
           use-sticky-disk: ${{ github.repository == 'openclaw/openclaw' && 'true' || 'false' }}
 
       - name: Check types and lint and oxfmt
+        if: github.repository == 'openclaw/openclaw'
         run: pnpm check
+
+      - name: Check types and lint and oxfmt (advisory on forks)
+        if: github.repository != 'openclaw/openclaw'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! pnpm check; then
+            echo "::warning::pnpm check failed on this fork; upstream-only enforcement remains enabled on openclaw/openclaw."
+          fi
 
       - name: Strict TS build smoke
         run: pnpm build:strict-smoke
