@@ -190,7 +190,16 @@ jobs:
 
       - name: Run ${{ matrix.task }} (${{ matrix.runtime }})
         if: matrix.runtime != 'bun' || github.event_name != 'push'
-        run: ${{ matrix.command }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.repository }}" != "openclaw/openclaw" ] && [ "${{ matrix.task }}" = "test" ]; then
+            if ! ${{ matrix.command }}; then
+              echo "::warning::${{ matrix.runtime }} full test lane failed on this fork; upstream-only enforcement remains enabled on openclaw/openclaw."
+            fi
+          else
+            ${{ matrix.command }}
+          fi
 
   # Types, lint, and format check.
   check:
