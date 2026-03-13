@@ -63,22 +63,22 @@ function createConfig(): OpenClawConfig {
     channels: {
       zulip: {
         botEmail: "liev-bot@example.com",
-        botApiKey: "liev-key",
+        botApiKey: "liev-key", // pragma: allowlist secret
         baseUrl: "https://zulip.example.com",
         accounts: {
           cody: {
             botEmail: "cody-bot@example.com",
-            botApiKey: "cody-key",
+            botApiKey: "cody-key", // pragma: allowlist secret
             baseUrl: "https://zulip.example.com",
           },
           liev: {
             botEmail: "liev-bot@example.com",
-            botApiKey: "liev-key",
+            botApiKey: "liev-key", // pragma: allowlist secret
             baseUrl: "https://zulip.example.com",
           },
           leo: {
             botEmail: "leo-bot@example.com",
-            botApiKey: "leo-key",
+            botApiKey: "leo-key", // pragma: allowlist secret
             baseUrl: "https://zulip.example.com",
           },
         },
