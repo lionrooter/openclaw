@@ -368,6 +368,27 @@ describe("runPreparedReply media-only handling", () => {
     expect(call?.followupRun.run.extraSystemPrompt ?? "").not.toContain("Runtime System Events");
   });
 
+  it("injects runtime intake guidance for known agent IDs", async () => {
+    await runPreparedReply(
+      baseParams({
+        agentId: "cody",
+        ctx: {
+          Body: "https://github.com/example/repo",
+          RawBody: "https://github.com/example/repo",
+          CommandBody: "https://github.com/example/repo",
+        },
+        sessionCtx: {
+          Body: "https://github.com/example/repo",
+          BodyStripped: "https://github.com/example/repo",
+          Provider: "slack",
+        },
+      }),
+    );
+
+    const call = vi.mocked(runReplyAgent).mock.calls[0]?.[0];
+    expect(call?.followupRun.run.extraSystemPrompt ?? "").toContain("repo/workflow-fit analysis");
+  });
+
   it("preserves first-token think hint when system events are prepended", async () => {
     // drainFormattedSystemEvents returns just the events block; the caller prepends it.
     // The hint must be extracted from the user body BEFORE prepending, so "System:"
