@@ -12,14 +12,16 @@ export const WORKFLOW_LANE_AGENT_DOMAIN_DEFAULTS: Readonly<Record<string, Workfl
   clawdy: "ops",
   cody: "coding",
   leo: "strategy",
+  storie: "narrative",
   artie: "creative",
   exdi: "creative",
   grove: "growth",
   archie: "infra",
+  maclern: "research",
   liev: "life",
   nesta: "family",
   finn: "finance",
-  projel: "project-lead",
+  mako: "maker",
 };
 
 const DOMAIN_APPLY_WHEN_DEFAULTS: Readonly<Record<WorkflowLaneDomain, WorkflowLaneApplyWhen>> = {
@@ -33,6 +35,9 @@ const DOMAIN_APPLY_WHEN_DEFAULTS: Readonly<Record<WorkflowLaneDomain, WorkflowLa
   finance: "always",
   "project-lead": "always",
   ops: "always",
+  narrative: "always",
+  research: "always",
+  maker: "always",
 };
 
 const DEFAULT_WORKFLOW_LANE: WorkflowLaneConfig = {

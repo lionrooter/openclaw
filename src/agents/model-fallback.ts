@@ -12,6 +12,7 @@ import {
   resolveProfilesUnavailableReason,
   resolveAuthProfileOrder,
 } from "./auth-profiles.js";
+import { OPENAI_CODEX_DEFAULT_MODEL_REF } from "./codex-defaults.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
 import {
   coerceToFailoverError,
@@ -201,7 +202,7 @@ function isRoutersModelCandidate(ref: ModelCandidate): boolean {
   return ref.provider === "blockrun";
 }
 
-const DEFAULT_CODEX_RESCUE_MODEL = "openai-codex/gpt-5.3-codex";
+const DEFAULT_CODEX_RESCUE_MODEL = OPENAI_CODEX_DEFAULT_MODEL_REF;
 
 function resolveCodexModelCandidateFromDefaults(params: {
   cfg: OpenClawConfig | undefined;

@@ -154,14 +154,11 @@ export function buildGatewayCronService(params: {
     const runtimeConfig = loadConfig();
     const normalized =
       typeof requested === "string" && requested.trim() ? normalizeAgentId(requested) : undefined;
-    const hasAgent =
-      normalized !== undefined &&
-      Array.isArray(runtimeConfig.agents?.list) &&
-      runtimeConfig.agents.list.some(
-        (entry) =>
-          entry && typeof entry.id === "string" && normalizeAgentId(entry.id) === normalized,
-      );
-    const agentId = hasAgent ? normalized : resolveDefaultAgentId(runtimeConfig);
+    // Preserve explicit cron agent IDs even when the runtime config is missing
+    // an agents.list entry. Main-session jobs are already constrained to the
+    // default agent during cron job validation; isolated runs should stay
+    // agent-scoped instead of silently downgrading to main.
+    const agentId = normalized ?? resolveDefaultAgentId(runtimeConfig);
     return { agentId, cfg: runtimeConfig };
   };
 
@@ -207,7 +204,11 @@ export function buildGatewayCronService(params: {
       (opts?.sessionKey
         ? normalizeAgentId(resolveAgentIdFromSessionKey(opts.sessionKey))
         : undefined);
-    const agentId = derivedAgentId || undefined;
+    // If a caller supplies an unqualified legacy session key without an
+    // explicit agent ID, keep wake routing on the default agent instead of
+    // dropping the target session entirely.
+    const agentId =
+      derivedAgentId || (opts?.sessionKey ? resolveDefaultAgentId(runtimeConfig) : undefined);
     const sessionKey =
       opts?.sessionKey && agentId
         ? resolveCronSessionKey({

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { normalizeCodexCliModel } from "../codex-defaults.js";
 import { __testing, createCodexDelegateTool } from "./codex-delegate-tool.js";
 import { ToolInputError } from "./common.js";
 
-const { parseCodexJsonlOutput, validateDirectory } = __testing;
+const { buildCodexCodeTaskPrompt, parseCodexJsonlOutput, validateDirectory } = __testing;
 
 describe("codex-delegate-tool", () => {
   describe("createCodexDelegateTool", () => {
@@ -48,8 +49,26 @@ describe("codex-delegate-tool", () => {
     });
 
     it("rejects path prefix tricks", () => {
-      // /tmp-evil should not match /tmp
       expect(() => validateDirectory("/tmp-evil/project", ["/tmp"])).toThrow(ToolInputError);
+    });
+  });
+
+  describe("normalizeCodexCliModel", () => {
+    it("normalizes provider-prefixed model refs to bare Codex CLI model names", () => {
+      expect(normalizeCodexCliModel("openai-codex/gpt-5.4")).toBe("gpt-5.4");
+      expect(normalizeCodexCliModel("codex/gpt-5.4")).toBe("gpt-5.4");
+      expect(normalizeCodexCliModel("gpt-5.4")).toBe("gpt-5.4");
+    });
+  });
+
+  describe("buildCodexCodeTaskPrompt", () => {
+    it("wraps code tasks with a no-finalization contract", () => {
+      const prompt = buildCodexCodeTaskPrompt("Implement the feature");
+      expect(prompt).toContain("Modify local files only.");
+      expect(prompt).toContain("Do not commit.");
+      expect(prompt).toContain("Do not push.");
+      expect(prompt).toContain("Do not deploy.");
+      expect(prompt).toContain("Implement the feature");
     });
   });
 
@@ -129,12 +148,9 @@ describe("codex-delegate-tool", () => {
 
   describe("config gating", () => {
     it("tool is not created when enabled=false", () => {
-      // This tests the gating logic in openclaw-tools.ts
-      // The tool itself always creates — gating happens at the wiring layer
       const tool = createCodexDelegateTool({
         config: { tools: { codexDelegate: { enabled: false } } },
       });
-      // Tool is always created by the factory; the enabled check is in openclaw-tools.ts
       expect(tool.name).toBe("codex_delegate");
     });
   });
