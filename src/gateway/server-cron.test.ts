@@ -9,6 +9,7 @@ const enqueueSystemEventMock = vi.fn();
 const requestHeartbeatNowMock = vi.fn();
 const loadConfigMock = vi.fn();
 const fetchWithSsrFGuardMock = vi.fn();
+const runCronIsolatedAgentTurnMock = vi.fn();
 
 vi.mock("../infra/system-events.js", () => ({
   enqueueSystemEvent: (...args: unknown[]) => enqueueSystemEventMock(...args),
@@ -30,6 +31,10 @@ vi.mock("../infra/net/fetch-guard.js", () => ({
   fetchWithSsrFGuard: (...args: unknown[]) => fetchWithSsrFGuardMock(...args),
 }));
 
+vi.mock("../cron/isolated-agent.js", () => ({
+  runCronIsolatedAgentTurn: (...args: unknown[]) => runCronIsolatedAgentTurnMock(...args),
+}));
+
 import { buildGatewayCronService } from "./server-cron.js";
 
 describe("buildGatewayCronService", () => {
@@ -38,6 +43,7 @@ describe("buildGatewayCronService", () => {
     requestHeartbeatNowMock.mockClear();
     loadConfigMock.mockClear();
     fetchWithSsrFGuardMock.mockClear();
+    runCronIsolatedAgentTurnMock.mockReset();
   });
 
   it("routes main-target jobs to the scoped session for enqueue + wake", async () => {
@@ -79,6 +85,71 @@ describe("buildGatewayCronService", () => {
       expect(requestHeartbeatNowMock).toHaveBeenCalledWith(
         expect.objectContaining({
           sessionKey: "agent:main:discord:channel:ops",
+        }),
+      );
+    } finally {
+      state.cron.stop();
+    }
+  });
+
+  it("preserves explicit isolated cron agent IDs even when they are missing from agents.list", async () => {
+    const tmpDir = path.join(os.tmpdir(), `server-cron-isolated-${Date.now()}`);
+    const cfg = {
+      session: {
+        mainKey: "main",
+      },
+      cron: {
+        store: path.join(tmpDir, "cron.json"),
+      },
+      agents: {
+        list: [{ id: "main", default: true }],
+      },
+    } as OpenClawConfig;
+    loadConfigMock.mockReturnValue(cfg);
+    runCronIsolatedAgentTurnMock.mockResolvedValue({
+      status: "ok",
+      summary: "digest ready",
+    });
+
+    const state = buildGatewayCronService({
+      cfg,
+      deps: {} as CliDeps,
+      broadcast: () => {},
+    });
+    try {
+      const job = await state.cron.add({
+        name: "isolated-maclern-digest",
+        enabled: true,
+        schedule: { kind: "at", at: new Date(1).toISOString() },
+        sessionTarget: "isolated",
+        wakeMode: "now",
+        agentId: "maclern",
+        payload: { kind: "agentTurn", message: "Review overnight training outputs." },
+      });
+
+      await state.cron.run(job.id, "force");
+
+      expect(runCronIsolatedAgentTurnMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentId: "maclern",
+          sessionKey: `cron:${job.id}`,
+          job: expect.objectContaining({ agentId: "maclern" }),
+        }),
+      );
+      expect(enqueueSystemEventMock).toHaveBeenCalledWith(
+        "Cron: digest ready",
+        expect.objectContaining({
+          sessionKey: "agent:maclern:main",
+        }),
+      );
+      for (const [, payload] of enqueueSystemEventMock.mock.calls) {
+        expect(payload?.sessionKey).not.toMatch(/^agent:main:/);
+      }
+      expect(requestHeartbeatNowMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentId: "maclern",
+          sessionKey: undefined,
+          reason: `cron:${job.id}`,
         }),
       );
     } finally {
