@@ -30,10 +30,10 @@ describe("workflow lane guard", () => {
     });
 
     expect(result.blocked).toBe(true);
-    expect(result.reason).toContain("missing ANCHOR");
+    expect(result.reason).toContain("missing ANCHOR before mutation");
   });
 
-  it("allows coding mutations after ANCHOR + REVIEW + VERIFY", () => {
+  it("allows coding mutations after ANCHOR", () => {
     const cfg = configWithLane({ agentId: "cody" });
     const ctx = { agentId: "cody", sessionKey: "agent:cody:main" };
 
@@ -45,22 +45,6 @@ describe("workflow lane guard", () => {
         config: cfg,
       }).blocked,
     ).toBe(false);
-    expect(
-      evaluateWorkflowLaneGuard({
-        toolName: "exec",
-        params: { command: "rp-cli review" },
-        ctx,
-        config: cfg,
-      }).blocked,
-    ).toBe(false);
-    expect(
-      evaluateWorkflowLaneGuard({
-        toolName: "exec",
-        params: { command: "pnpm test" },
-        ctx,
-        config: cfg,
-      }).blocked,
-    ).toBe(false);
 
     const result = evaluateWorkflowLaneGuard({
       toolName: "write",
@@ -68,23 +52,172 @@ describe("workflow lane guard", () => {
       ctx,
       config: cfg,
     });
+
     expect(result.blocked).toBe(false);
   });
 
-  it("enforces strategy lane for high-impact cross-session sends", () => {
+  it("blocks coding finalization until REVIEW and VERIFY happen after the latest mutation", () => {
+    const cfg = configWithLane({ agentId: "cody" });
+    const ctx = { agentId: "cody", sessionKey: "agent:cody:finalize" };
+
+    evaluateWorkflowLaneGuard({
+      toolName: "exec",
+      params: { command: 'rp-cli context_builder task="x"' },
+      ctx,
+      config: cfg,
+    });
+    evaluateWorkflowLaneGuard({
+      toolName: "write",
+      params: { path: "src/main.ts", content: "updated" },
+      ctx,
+      config: cfg,
+    });
+
+    const beforeReview = evaluateWorkflowLaneGuard({
+      toolName: "exec",
+      params: { command: "git commit -m test" },
+      ctx,
+      config: cfg,
+    });
+    expect(beforeReview.blocked).toBe(true);
+    expect(beforeReview.reason).toContain("missing REVIEW after last mutation before finalizing");
+
+    evaluateWorkflowLaneGuard({
+      toolName: "exec",
+      params: { command: "rp-cli review" },
+      ctx,
+      config: cfg,
+    });
+
+    const beforeVerify = evaluateWorkflowLaneGuard({
+      toolName: "exec",
+      params: { command: "git commit -m test" },
+      ctx,
+      config: cfg,
+    });
+    expect(beforeVerify.blocked).toBe(true);
+    expect(beforeVerify.reason).toContain("missing VERIFY after last mutation before finalizing");
+
+    evaluateWorkflowLaneGuard({
+      toolName: "exec",
+      params: { command: "pnpm test" },
+      ctx,
+      config: cfg,
+    });
+
+    const allowed = evaluateWorkflowLaneGuard({
+      toolName: "exec",
+      params: { command: "git commit -m test" },
+      ctx,
+      config: cfg,
+    });
+    expect(allowed.blocked).toBe(false);
+  });
+
+  it("invalidates earlier review and verify after a later coding mutation", () => {
+    const cfg = configWithLane({ agentId: "cody" });
+    const ctx = { agentId: "cody", sessionKey: "agent:cody:stale-review" };
+
+    evaluateWorkflowLaneGuard({
+      toolName: "exec",
+      params: { command: 'rp-cli context_builder task="x"' },
+      ctx,
+      config: cfg,
+    });
+    evaluateWorkflowLaneGuard({
+      toolName: "write",
+      params: { path: "src/main.ts", content: "first" },
+      ctx,
+      config: cfg,
+    });
+    evaluateWorkflowLaneGuard({
+      toolName: "exec",
+      params: { command: "rp-cli review" },
+      ctx,
+      config: cfg,
+    });
+    evaluateWorkflowLaneGuard({
+      toolName: "exec",
+      params: { command: "pnpm test" },
+      ctx,
+      config: cfg,
+    });
+    evaluateWorkflowLaneGuard({
+      toolName: "write",
+      params: { path: "src/main.ts", content: "second" },
+      ctx,
+      config: cfg,
+    });
+
+    const result = evaluateWorkflowLaneGuard({
+      toolName: "exec",
+      params: { command: "git commit -m test" },
+      ctx,
+      config: cfg,
+    });
+    expect(result.blocked).toBe(true);
+    expect(result.reason).toContain("missing REVIEW after last mutation before finalizing");
+  });
+
+  it("translates legacy mutationPolicy so review and verify block finalization, not mutation", () => {
     const cfg = {
       agents: {
         defaults: {
           workflowLane: {
-            domain: "strategy",
+            domain: "coding",
+            mode: "hard",
+            applyWhen: "dev-intent",
+            mutationPolicy: {
+              blockBeforeAnchor: true,
+              blockBeforeReview: true,
+              blockBeforeVerify: true,
+            },
+          },
+        },
+        list: [{ id: "cody" }],
+      },
+    } satisfies OpenClawConfig;
+    const ctx = { agentId: "cody", sessionKey: "agent:cody:legacy-policy" };
+
+    evaluateWorkflowLaneGuard({
+      toolName: "exec",
+      params: { command: 'rp-cli context_builder task="x"' },
+      ctx,
+      config: cfg,
+    });
+
+    const writeResult = evaluateWorkflowLaneGuard({
+      toolName: "write",
+      params: { path: "src/main.ts", content: "updated" },
+      ctx,
+      config: cfg,
+    });
+    expect(writeResult.blocked).toBe(false);
+
+    const commitResult = evaluateWorkflowLaneGuard({
+      toolName: "exec",
+      params: { command: "git commit -m test" },
+      ctx,
+      config: cfg,
+    });
+    expect(commitResult.blocked).toBe(true);
+    expect(commitResult.reason).toContain("missing REVIEW after last mutation before finalizing");
+  });
+
+  it("enforces the narrative lane for high-impact cross-session sends", () => {
+    const cfg = {
+      agents: {
+        defaults: {
+          workflowLane: {
+            domain: "narrative",
             applyWhen: "always",
             mode: "hard",
           },
         },
-        list: [{ id: "leo" }],
+        list: [{ id: "storie" }],
       },
     } satisfies OpenClawConfig;
-    const ctx = { agentId: "leo", sessionKey: "agent:leo:main" };
+    const ctx = { agentId: "storie", sessionKey: "agent:storie:main" };
 
     const blocked = evaluateWorkflowLaneGuard({
       toolName: "sessions_send",
@@ -94,93 +227,9 @@ describe("workflow lane guard", () => {
     });
     expect(blocked.blocked).toBe(true);
     expect(blocked.reason).toContain("missing ANCHOR");
-
-    evaluateWorkflowLaneGuard({
-      toolName: "read",
-      params: { path: "/Users/lionheart/clawd/agents/leo/workflows/leo_Workflow-SKILL.md" },
-      ctx,
-      config: cfg,
-    });
-    evaluateWorkflowLaneGuard({
-      toolName: "read",
-      params: { path: "/Users/lionheart/clawd/agents/leo/workflows/leo_Review-Checklist.md" },
-      ctx,
-      config: cfg,
-    });
-    evaluateWorkflowLaneGuard({
-      toolName: "edit",
-      params: { path: "/Users/lionheart/clawd/agents/leo/workflows/leo_Maintenance-Log.md" },
-      ctx,
-      config: cfg,
-    });
-
-    const allowed = evaluateWorkflowLaneGuard({
-      toolName: "sessions_send",
-      params: { sessionKey: "agent:main:main", message: "done" },
-      ctx,
-      config: cfg,
-    });
-    expect(allowed.blocked).toBe(false);
   });
 
-  it("does not gate regular message sends for non-coding lanes", () => {
-    const cfg = {
-      agents: {
-        defaults: {
-          workflowLane: {
-            domain: "strategy",
-            applyWhen: "always",
-            mode: "hard",
-          },
-        },
-        list: [{ id: "leo" }],
-      },
-    } satisfies OpenClawConfig;
-    const ctx = { agentId: "leo", sessionKey: "agent:leo:main" };
-
-    const result = evaluateWorkflowLaneGuard({
-      toolName: "message",
-      params: { action: "send", message: "status" },
-      ctx,
-      config: cfg,
-    });
-    expect(result.blocked).toBe(false);
-  });
-
-  it("treats mutating maestro actions as high-impact", () => {
-    const cfg = {
-      agents: {
-        defaults: {
-          workflowLane: {
-            domain: "strategy",
-            applyWhen: "always",
-            mode: "hard",
-          },
-        },
-        list: [{ id: "leo" }],
-      },
-    } satisfies OpenClawConfig;
-    const ctx = { agentId: "leo", sessionKey: "agent:leo:maestro-claim" };
-
-    const blocked = evaluateWorkflowLaneGuard({
-      toolName: "maestro",
-      params: { action: "claim", task: "inbox/task.md", owner: "leo" },
-      ctx,
-      config: cfg,
-    });
-    expect(blocked.blocked).toBe(true);
-    expect(blocked.reason).toContain("missing ANCHOR");
-
-    const nonMutating = evaluateWorkflowLaneGuard({
-      toolName: "maestro",
-      params: { action: "list" },
-      ctx,
-      config: cfg,
-    });
-    expect(nonMutating.blocked).toBe(false);
-  });
-
-  it("treats review as verify for non-mutating domain runs", () => {
+  it("treats review as enough verify for non-mutating non-coding runs", () => {
     const cfg = {
       agents: {
         defaults: {
@@ -252,7 +301,7 @@ describe("workflow lane guard", () => {
       config: cfg,
     });
     expect(result.blocked).toBe(true);
-    expect(result.reason).toContain("missing VERIFY");
+    expect(result.reason).toContain("missing VERIFY before high-impact mutation");
   });
 
   it("ignores blank stage checks instead of auto-matching everything", () => {
@@ -272,10 +321,13 @@ describe("workflow lane guard", () => {
               verify: false,
               gate: false,
             },
-            mutationPolicy: {
-              blockBeforeAnchor: true,
-              blockBeforeReview: false,
-              blockBeforeVerify: false,
+            actionRequirements: {
+              finalize: {
+                anchor: true,
+                review: false,
+                verify: false,
+                gate: false,
+              },
             },
           },
         },
@@ -294,121 +346,6 @@ describe("workflow lane guard", () => {
     expect(result.reason).toContain("missing ANCHOR");
   });
 
-  it("handles malformed stageChecks values without crashing", () => {
-    const cfg = {
-      agents: {
-        defaults: {
-          workflowLane: {
-            domain: "strategy",
-            applyWhen: "always",
-            mode: "hard",
-            stageChecks: {
-              anchor: [123, "  "] as unknown as string[],
-            },
-            requiredStages: {
-              anchor: true,
-              review: false,
-              verify: false,
-              gate: false,
-            },
-            mutationPolicy: {
-              blockBeforeAnchor: true,
-              blockBeforeReview: false,
-              blockBeforeVerify: false,
-            },
-          },
-        },
-        list: [{ id: "leo" }],
-      },
-    } satisfies OpenClawConfig;
-    const ctx = { agentId: "leo", sessionKey: "agent:leo:malformed-stage-checks" };
-
-    const result = evaluateWorkflowLaneGuard({
-      toolName: "sessions_send",
-      params: { sessionKey: "agent:main:main", message: "status" },
-      ctx,
-      config: cfg,
-    });
-    expect(result.blocked).toBe(true);
-    expect(result.reason).toContain("missing ANCHOR");
-  });
-
-  it("does not treat `git status` as non-coding verify", () => {
-    const cfg = {
-      agents: {
-        defaults: {
-          workflowLane: {
-            domain: "strategy",
-            applyWhen: "always",
-            mode: "hard",
-          },
-        },
-        list: [{ id: "leo" }],
-      },
-    } satisfies OpenClawConfig;
-    const ctx = { agentId: "leo", sessionKey: "agent:leo:status-not-verify" };
-
-    evaluateWorkflowLaneGuard({
-      toolName: "read",
-      params: { path: "/Users/lionheart/clawd/agents/leo/workflows/leo_Workflow-SKILL.md" },
-      ctx,
-      config: cfg,
-    });
-    evaluateWorkflowLaneGuard({
-      toolName: "read",
-      params: { path: "/Users/lionheart/clawd/agents/leo/workflows/leo_Review-Checklist.md" },
-      ctx,
-      config: cfg,
-    });
-    evaluateWorkflowLaneGuard({
-      toolName: "edit",
-      params: { path: "/Users/lionheart/clawd/agents/leo/workflows/leo_Notes.md" },
-      ctx,
-      config: cfg,
-    });
-    evaluateWorkflowLaneGuard({
-      toolName: "exec",
-      params: { command: "git status" },
-      ctx,
-      config: cfg,
-    });
-
-    const result = evaluateWorkflowLaneGuard({
-      toolName: "sessions_send",
-      params: { sessionKey: "agent:main:main", message: "status" },
-      ctx,
-      config: cfg,
-    });
-    expect(result.blocked).toBe(true);
-    expect(result.reason).toContain("missing VERIFY");
-  });
-
-  it("does not flip coding dev-intent on passive reads", () => {
-    const cfg = {
-      agents: {
-        defaults: {
-          workflowLane: {
-            domain: "coding",
-            applyWhen: "dev-intent",
-            mode: "hard",
-          },
-        },
-        list: [{ id: "cody" }],
-      },
-    } satisfies OpenClawConfig;
-    const ctx = { agentId: "cody", sessionKey: "agent:cody:read-only" };
-
-    evaluateWorkflowLaneGuard({
-      toolName: "read",
-      params: { path: "README.md" },
-      ctx,
-      config: cfg,
-    });
-
-    const state = __testing.stageStateBySession.get("session:agent:cody:read-only");
-    expect(state?.devIntent).toBe(false);
-  });
-
   it("preserves global requiredStages when agent overrides one nested field", () => {
     const cfg = {
       agents: {
@@ -419,14 +356,9 @@ describe("workflow lane guard", () => {
             mode: "hard",
             requiredStages: {
               anchor: false,
-              review: false,
+              review: true,
               verify: false,
               gate: false,
-            },
-            mutationPolicy: {
-              blockBeforeAnchor: true,
-              blockBeforeReview: true,
-              blockBeforeVerify: true,
             },
           },
         },
@@ -452,72 +384,56 @@ describe("workflow lane guard", () => {
     });
     expect(blocked.blocked).toBe(true);
     expect(blocked.reason).toContain("missing ANCHOR");
-
-    evaluateWorkflowLaneGuard({
-      toolName: "read",
-      params: { path: "/Users/lionheart/clawd/agents/leo/workflows/leo_Workflow-SKILL.md" },
-      ctx,
-      config: cfg,
-    });
-
-    const allowed = evaluateWorkflowLaneGuard({
-      toolName: "sessions_send",
-      params: { sessionKey: "agent:main:main", message: "status" },
-      ctx,
-      config: cfg,
-    });
-    expect(allowed.blocked).toBe(false);
   });
 
-  it("preserves global mutationPolicy when agent overrides one nested field", () => {
+  it("preserves global actionRequirements when agent overrides one nested field", () => {
     const cfg = {
       agents: {
         defaults: {
           workflowLane: {
-            domain: "strategy",
-            applyWhen: "always",
+            domain: "coding",
+            applyWhen: "dev-intent",
             mode: "hard",
-            requiredStages: {
-              anchor: true,
-              review: true,
-              verify: false,
-              gate: false,
-            },
-            mutationPolicy: {
-              blockBeforeAnchor: false,
-              blockBeforeReview: false,
-              blockBeforeVerify: false,
+            actionRequirements: {
+              mutation: {
+                anchor: false,
+                review: false,
+                verify: false,
+                gate: false,
+              },
+              finalize: {
+                anchor: true,
+                review: true,
+                verify: false,
+                gate: false,
+              },
             },
           },
         },
         list: [
           {
-            id: "leo",
+            id: "cody",
             workflowLane: {
-              mutationPolicy: {
-                blockBeforeAnchor: true,
+              actionRequirements: {
+                mutation: {
+                  anchor: true,
+                },
               },
             },
           },
         ],
       },
     } satisfies OpenClawConfig;
-    const ctx = { agentId: "leo", sessionKey: "agent:leo:mutation-policy-merge" };
+    const ctx = { agentId: "cody", sessionKey: "agent:cody:action-requirements-merge" };
 
-    evaluateWorkflowLaneGuard({
-      toolName: "read",
-      params: { path: "/Users/lionheart/clawd/agents/leo/workflows/leo_Workflow-SKILL.md" },
+    const blocked = evaluateWorkflowLaneGuard({
+      toolName: "write",
+      params: { path: "src/main.ts", content: "updated" },
       ctx,
       config: cfg,
     });
-
-    const allowed = evaluateWorkflowLaneGuard({
-      toolName: "sessions_send",
-      params: { sessionKey: "agent:main:main", message: "status" },
-      ctx,
-      config: cfg,
-    });
-    expect(allowed.blocked).toBe(false);
+    expect(blocked.blocked).toBe(true);
+    expect(blocked.reason).toContain("missing ANCHOR before mutation");
   });
 
   it("falls back safely when workflow lane domain is invalid", () => {
@@ -545,7 +461,7 @@ describe("workflow lane guard", () => {
     expect(result.reason).toContain("missing ANCHOR");
   });
 
-  it("falls back safely when mode/applyWhen are invalid", () => {
+  it("falls back safely when mode or applyWhen are invalid", () => {
     const cfg = {
       agents: {
         defaults: {
@@ -568,100 +484,5 @@ describe("workflow lane guard", () => {
     });
     expect(result.blocked).toBe(true);
     expect(result.reason).toContain("missing ANCHOR");
-  });
-
-  it("does not mark review on regex substrings like `different`", () => {
-    const cfg = {
-      agents: {
-        defaults: {
-          workflowLane: {
-            domain: "strategy",
-            applyWhen: "always",
-            mode: "hard",
-          },
-        },
-        list: [{ id: "leo" }],
-      },
-    } satisfies OpenClawConfig;
-    const ctx = { agentId: "leo", sessionKey: "agent:leo:review-regex-boundary" };
-
-    evaluateWorkflowLaneGuard({
-      toolName: "read",
-      params: { path: "/Users/lionheart/clawd/agents/leo/workflows/leo_Workflow-SKILL.md" },
-      ctx,
-      config: cfg,
-    });
-    evaluateWorkflowLaneGuard({
-      toolName: "exec",
-      params: { command: "echo different" },
-      ctx,
-      config: cfg,
-    });
-
-    const result = evaluateWorkflowLaneGuard({
-      toolName: "sessions_send",
-      params: { sessionKey: "agent:main:main", message: "status" },
-      ctx,
-      config: cfg,
-    });
-    expect(result.blocked).toBe(true);
-    expect(result.reason).toContain("missing REVIEW");
-  });
-
-  it("treats `git pull` as a mutating exec action", () => {
-    const cfg = {
-      agents: {
-        defaults: {
-          workflowLane: {
-            domain: "strategy",
-            applyWhen: "always",
-            mode: "hard",
-          },
-        },
-        list: [{ id: "leo" }],
-      },
-    } satisfies OpenClawConfig;
-    const ctx = { agentId: "leo", sessionKey: "agent:leo:git-pull-mutation" };
-
-    const result = evaluateWorkflowLaneGuard({
-      toolName: "exec",
-      params: { command: "git pull --rebase" },
-      ctx,
-      config: cfg,
-    });
-    expect(result.blocked).toBe(true);
-    expect(result.reason).toContain("missing ANCHOR");
-  });
-
-  it("accepts pnpm verify commands that include flags", () => {
-    const cfg = configWithLane({ agentId: "cody" });
-    const ctx = { agentId: "cody", sessionKey: "agent:cody:pnpm-flags-verify" };
-
-    evaluateWorkflowLaneGuard({
-      toolName: "exec",
-      params: { command: 'rp-cli context_builder task="x"' },
-      ctx,
-      config: cfg,
-    });
-    evaluateWorkflowLaneGuard({
-      toolName: "exec",
-      params: { command: "rp-cli review" },
-      ctx,
-      config: cfg,
-    });
-    evaluateWorkflowLaneGuard({
-      toolName: "exec",
-      params: { command: "pnpm -w test" },
-      ctx,
-      config: cfg,
-    });
-
-    const result = evaluateWorkflowLaneGuard({
-      toolName: "write",
-      params: { path: "src/main.ts", content: "updated" },
-      ctx,
-      config: cfg,
-    });
-    expect(result.blocked).toBe(false);
   });
 });

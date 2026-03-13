@@ -13,7 +13,9 @@ describe("workflow lane presets", () => {
     expect(resolveWorkflowLaneDomainForAgent("clawdy")).toBe("ops");
     expect(resolveWorkflowLaneDomainForAgent("cody")).toBe("coding");
     expect(resolveWorkflowLaneDomainForAgent("leo")).toBe("strategy");
-    expect(resolveWorkflowLaneDomainForAgent("projel")).toBe("project-lead");
+    expect(resolveWorkflowLaneDomainForAgent("storie")).toBe("narrative");
+    expect(resolveWorkflowLaneDomainForAgent("maclern")).toBe("research");
+    expect(resolveWorkflowLaneDomainForAgent("mako")).toBe("maker");
     expect(resolveWorkflowLaneDomainForAgent("unknown")).toBeUndefined();
     expect(resolveWorkflowLaneDomainForAgent("toString")).toBeUndefined();
   });
@@ -25,10 +27,16 @@ describe("workflow lane presets", () => {
       domain: "coding",
       applyWhen: "dev-intent",
     });
-    expect(resolveRecommendedWorkflowLaneForAgent("leo")).toEqual({
+    expect(resolveRecommendedWorkflowLaneForAgent("storie")).toEqual({
       enabled: true,
       mode: "hard",
-      domain: "strategy",
+      domain: "narrative",
+      applyWhen: "always",
+    });
+    expect(resolveRecommendedWorkflowLaneForAgent("maclern")).toEqual({
+      enabled: true,
+      mode: "hard",
+      domain: "research",
       applyWhen: "always",
     });
   });
@@ -36,7 +44,7 @@ describe("workflow lane presets", () => {
   it("hydrates defaults and known agent entries when missing", () => {
     const cfg: OpenClawConfig = {
       agents: {
-        list: [{ id: "cody" }, { id: "leo" }, { id: "custom" }],
+        list: [{ id: "cody" }, { id: "storie" }, { id: "maclern" }, { id: "custom" }],
       },
     };
 
@@ -53,10 +61,16 @@ describe("workflow lane presets", () => {
       domain: "coding",
       applyWhen: "dev-intent",
     });
-    expect(next.agents?.list?.find((entry) => entry.id === "leo")?.workflowLane).toEqual({
+    expect(next.agents?.list?.find((entry) => entry.id === "storie")?.workflowLane).toEqual({
       enabled: true,
       mode: "hard",
-      domain: "strategy",
+      domain: "narrative",
+      applyWhen: "always",
+    });
+    expect(next.agents?.list?.find((entry) => entry.id === "maclern")?.workflowLane).toEqual({
+      enabled: true,
+      mode: "hard",
+      domain: "research",
       applyWhen: "always",
     });
     expect(next.agents?.list?.find((entry) => entry.id === "custom")?.workflowLane).toBeUndefined();

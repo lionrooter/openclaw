@@ -560,6 +560,9 @@ export const WorkflowLaneDomainSchema = z
     z.literal("finance"),
     z.literal("project-lead"),
     z.literal("ops"),
+    z.literal("narrative"),
+    z.literal("research"),
+    z.literal("maker"),
   ])
   .optional();
 
@@ -584,6 +587,29 @@ export const WorkflowLaneSchema = z
         review: z.array(z.string()).optional(),
         verify: z.array(z.string()).optional(),
         gate: z.array(z.string()).optional(),
+      })
+      .strict()
+      .optional(),
+    actionRequirements: z
+      .object({
+        mutation: z
+          .object({
+            anchor: z.boolean().optional(),
+            review: z.boolean().optional(),
+            verify: z.boolean().optional(),
+            gate: z.boolean().optional(),
+          })
+          .strict()
+          .optional(),
+        finalize: z
+          .object({
+            anchor: z.boolean().optional(),
+            review: z.boolean().optional(),
+            verify: z.boolean().optional(),
+            gate: z.boolean().optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .optional(),

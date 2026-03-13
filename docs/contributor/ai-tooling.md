@@ -51,6 +51,7 @@ For non-trivial coding work:
 - create and approve `.workflow/plan.md`
 - use `rp-cli` / RepoPrompt for ANCHOR and REVIEW when available
 - follow `ANCHOR -> EXECUTE -> REVIEW -> TEST -> GATE`
+- runtime workflow-lane enforcement is narrower than the procedural `.workflow/` gate: it enforces stage ordering around mutation and finalization, but it does not replace PRD approval, plan approval, or deploy authority
 
 Canonical workflow source: `/Users/lionheart/clawd/workflows/cody/cody_Workflow-SKILL.md`
 

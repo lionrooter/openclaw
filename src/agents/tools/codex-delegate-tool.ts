@@ -3,12 +3,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Type } from "@sinclair/typebox";
 import type { OpenClawConfig } from "../../config/config.js";
+import type { CodexDelegateConfig } from "../../config/types.tools.js";
+import { CODEX_DEFAULT_CLI_MODEL, normalizeCodexCliModel } from "../codex-defaults.js";
 import { stringEnum } from "../schema/typebox.js";
 import { type AnyAgentTool, ToolInputError, jsonResult, readStringParam } from "./common.js";
 
-const DEFAULT_MODEL = "gpt-5.3-codex";
 const DEFAULT_TIMEOUT_MS = 300_000;
-
 const CODEX_ACTIONS = ["code", "review"] as const;
 
 const CodexDelegateSchema = Type.Object({
@@ -21,11 +21,9 @@ const CodexDelegateSchema = Type.Object({
   }),
   directory: Type.String({ description: "Absolute path to the target working directory." }),
   model: Type.Optional(
-    Type.String({ description: "Codex model override (default: gpt-5.3-codex)." }),
+    Type.String({ description: `Codex model override (default: ${CODEX_DEFAULT_CLI_MODEL}).` }),
   ),
 });
-
-import type { CodexDelegateConfig } from "../../config/types.tools.js";
 
 function resolveCodexConfig(config?: OpenClawConfig): CodexDelegateConfig {
   return config?.tools?.codexDelegate ?? {};
@@ -35,12 +33,9 @@ async function resolveCodexBinary(configCommand?: string): Promise<string> {
   if (configCommand) {
     return configCommand;
   }
-  // Try common locations
   const candidates = [
     process.env.CODEX_PATH,
-    // nvm-managed global
     path.join(process.env.HOME ?? "", ".nvm/versions/node", process.version, "bin/codex"),
-    // homebrew
     "/opt/homebrew/bin/codex",
     "/usr/local/bin/codex",
   ].filter(Boolean) as string[];
@@ -50,11 +45,10 @@ async function resolveCodexBinary(configCommand?: string): Promise<string> {
       await fs.access(candidate, fs.constants.X_OK);
       return candidate;
     } catch {
-      // not found, continue
+      // continue
     }
   }
 
-  // Fall back to PATH resolution
   return "codex";
 }
 
@@ -64,8 +58,8 @@ function validateDirectory(dir: string, allowDirs?: string[]): void {
   }
   if (allowDirs && allowDirs.length > 0) {
     const normalized = path.resolve(dir);
-    const allowed = allowDirs.some((allowed) => {
-      const normalizedAllowed = path.resolve(allowed);
+    const allowed = allowDirs.some((allowedDir) => {
+      const normalizedAllowed = path.resolve(allowedDir);
       return (
         normalized === normalizedAllowed || normalized.startsWith(normalizedAllowed + path.sep)
       );
@@ -85,6 +79,21 @@ type CodexResult = {
   durationMs: number;
 };
 
+function buildCodexCodeTaskPrompt(task: string): string {
+  return [
+    "You are executing inside a workflow-lane controlled repository.",
+    "Modify local files only.",
+    "Run local verification if useful.",
+    "Do not commit.",
+    "Do not push.",
+    "Do not deploy.",
+    "Stop after producing local file changes and local verification results.",
+    "",
+    "Task:",
+    task,
+  ].join("\n");
+}
+
 function parseCodexJsonlOutput(raw: string): string {
   const lines = raw.split("\n").filter(Boolean);
   const outputParts: string[] = [];
@@ -92,11 +101,9 @@ function parseCodexJsonlOutput(raw: string): string {
   for (const line of lines) {
     try {
       const event = JSON.parse(line) as Record<string, unknown>;
-      // Extract text from item.completed events
       if (event.type === "item.completed" || event.type === "message.completed") {
         const item = event.item as Record<string, unknown> | undefined;
         if (item) {
-          // Text content
           const content = item.content as Array<Record<string, unknown>> | undefined;
           if (Array.isArray(content)) {
             for (const part of content) {
@@ -105,14 +112,12 @@ function parseCodexJsonlOutput(raw: string): string {
               }
             }
           }
-          // Formatted text
           const formatted = item.formatted as Record<string, unknown> | undefined;
           if (formatted && typeof formatted.text === "string") {
             outputParts.push(formatted.text);
           }
         }
       }
-      // Extract command execution results
       if (event.type === "command.completed") {
         const output = event.output as string | undefined;
         if (output) {
@@ -120,7 +125,6 @@ function parseCodexJsonlOutput(raw: string): string {
         }
       }
     } catch {
-      // Non-JSON line, include as-is
       if (line.trim()) {
         outputParts.push(line);
       }
@@ -198,16 +202,17 @@ export function createCodexDelegateTool(opts?: { config?: OpenClawConfig }): Any
     label: "Codex Delegate",
     name: "codex_delegate",
     description:
-      'Delegate coding tasks to Codex CLI. Use action="code" to implement code changes in a target directory, or action="review" to review uncommitted changes. The agent stays in control while Codex handles the code-writing execution step.',
+      'Delegate coding tasks to Codex CLI. Use action="code" to implement local file changes only, or action="review" to review uncommitted changes. Codex must not commit, push, or deploy.',
     parameters: CodexDelegateSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
       const action = readStringParam(params, "action", { required: true });
       const task = readStringParam(params, "task", { required: true });
       const directory = readStringParam(params, "directory", { required: true });
-      const model = readStringParam(params, "model") ?? codexConfig.model ?? DEFAULT_MODEL;
+      const model = normalizeCodexCliModel(
+        readStringParam(params, "model") ?? codexConfig.model ?? CODEX_DEFAULT_CLI_MODEL,
+      );
 
-      // Validate directory exists and is allowed
       validateDirectory(directory, codexConfig.allowDirs);
       try {
         const stat = await fs.stat(directory);
@@ -227,7 +232,7 @@ export function createCodexDelegateTool(opts?: { config?: OpenClawConfig }): Any
       if (action === "code") {
         const result = await spawnCodex({
           binary,
-          args: ["exec", "--json", "--full-auto", "-m", model, task],
+          args: ["exec", "--json", "--full-auto", "-m", model, buildCodexCodeTaskPrompt(task)],
           cwd: directory,
           timeoutMs,
         });
@@ -249,8 +254,8 @@ export function createCodexDelegateTool(opts?: { config?: OpenClawConfig }): Any
   };
 }
 
-// Exported for testing
 export const __testing = {
+  buildCodexCodeTaskPrompt,
   parseCodexJsonlOutput,
   validateDirectory,
   resolveCodexBinary,
