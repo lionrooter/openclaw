@@ -235,7 +235,7 @@ describe("runWithModelFallback", () => {
     expect(run.mock.calls).toEqual([
       ["blockrun", "auto"],
       ["anthropic", "claude-sonnet-4-5"],
-      ["openai-codex", "gpt-5.3-codex"],
+      ["openai-codex", "gpt-5.4"],
     ]);
   });
 
@@ -268,7 +268,7 @@ describe("runWithModelFallback", () => {
     expect(run.mock.calls).toEqual([
       ["blockrun", "auto"],
       ["anthropic", "claude-sonnet-4-5"],
-      ["openai-codex", "gpt-5.3-codex"],
+      ["openai-codex", "gpt-5.4"],
     ]);
   });
 

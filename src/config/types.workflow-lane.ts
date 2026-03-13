@@ -8,7 +8,10 @@ export type WorkflowLaneDomain =
   | "family"
   | "finance"
   | "project-lead"
-  | "ops";
+  | "ops"
+  | "narrative"
+  | "research"
+  | "maker";
 
 export type WorkflowLaneMode = "hard" | "soft";
 export type WorkflowLaneApplyWhen = "dev-intent" | "always";
@@ -18,6 +21,11 @@ export type WorkflowLaneRequiredStages = {
   review?: boolean;
   verify?: boolean;
   gate?: boolean;
+};
+
+export type WorkflowLaneActionRequirements = {
+  mutation?: WorkflowLaneRequiredStages;
+  finalize?: WorkflowLaneRequiredStages;
 };
 
 export type WorkflowLaneStageChecks = {
@@ -32,11 +40,11 @@ export type WorkflowLaneStageChecks = {
 };
 
 export type WorkflowLaneMutationPolicy = {
-  /** Block high-impact actions when ANCHOR has not been completed. */
+  /** @deprecated Use actionRequirements.mutation.anchor instead. */
   blockBeforeAnchor?: boolean;
-  /** Block high-impact actions when REVIEW has not been completed. */
+  /** @deprecated Use actionRequirements.finalize.review instead. */
   blockBeforeReview?: boolean;
-  /** Block high-impact actions when VERIFY has not been completed. */
+  /** @deprecated Use actionRequirements.finalize.verify instead. */
   blockBeforeVerify?: boolean;
 };
 
@@ -46,6 +54,7 @@ export type WorkflowLaneConfig = {
   applyWhen?: WorkflowLaneApplyWhen;
   domain?: WorkflowLaneDomain;
   requiredStages?: WorkflowLaneRequiredStages;
+  actionRequirements?: WorkflowLaneActionRequirements;
   stageChecks?: WorkflowLaneStageChecks;
   mutationPolicy?: WorkflowLaneMutationPolicy;
 };
